@@ -1,0 +1,109 @@
+# Zentrale Konfiguration des KI-Unternehmens.
+# Alle Limits sind hier konfigurierbar. Sicherheitsregeln liegen getrennt in security.toml.
+
+[company]
+goal = "Innerhalb von 30 Tagen ein digitales Geschäftsmodell finden, das mit KI-Agenten weitgehend autonom betrieben werden kann, wenig Startkapital braucht, keine Lagerbestände voraussetzt und realistische Chancen auf erste zahlende Kunden bietet."
+name = "KI-Agenten Unternehmen"
+
+[budget]
+monthly_total_eur = 100.0        # Gesamtbudget pro Monat (API + genehmigte externe Ausgaben)
+monthly_api_eur = 30.0           # maximale API-Ausgaben pro Monat
+per_run_eur = 2.0                # maximale Kosten pro Geschäftslauf
+max_agent_calls_per_run = 20     # maximale Agentenaufrufe pro Geschäftslauf
+max_revisions_per_task = 2       # maximale Überarbeitungen pro Aufgabe
+max_attempts_per_call = 2        # Versuche bei API-Fehlern (inkl. erstem Versuch)
+warn_thresholds = [0.5, 0.75, 0.9]
+usd_to_eur = 0.92                # Umrechnungskurs, regelmäßig prüfen
+uncertainty_markup = 1.25        # Aufschlag, wenn Verbrauch nur geschätzt werden kann
+
+[models]
+default = "gpt-5.4-mini"         # kostengünstiges Standardmodell
+escalation = "gpt-5.4"           # nur nach wiederholt ungültiger Ausgabe (begründeter Bedarf)
+allow_escalation = true
+disable_tracing = true           # keine Trace-Daten an den Anbieter senden
+
+# Preise in USD pro 1 Mio. Tokens. QUELLE: Drittanbieter-Übersichten (Stand Juni 2026).
+# Vor dem Live-Betrieb mit der offiziellen OpenAI-Preisseite abgleichen!
+[pricing."gpt-5.4-mini"]
+input_per_mtok_usd = 0.75
+output_per_mtok_usd = 4.50
+
+[pricing."gpt-5.4-nano"]
+input_per_mtok_usd = 0.20
+output_per_mtok_usd = 1.25
+
+[pricing."gpt-5.4"]
+input_per_mtok_usd = 2.50
+output_per_mtok_usd = 15.00
+
+[pricing."mock-model"]
+input_per_mtok_usd = 0.75
+output_per_mtok_usd = 4.50
+
+# Tokenlimits je Agent (max_output_tokens begrenzt die Antwort, max_input_tokens den Kontext)
+[agents.ceo]
+max_output_tokens = 2500
+max_input_tokens = 12000
+[agents.research]
+max_output_tokens = 4000
+max_input_tokens = 8000
+[agents.strategy]
+max_output_tokens = 4000
+max_input_tokens = 12000
+[agents.finance]
+max_output_tokens = 2500
+max_input_tokens = 10000
+[agents.product]
+max_output_tokens = 3000
+max_input_tokens = 10000
+[agents.builder]
+max_output_tokens = 8000
+max_input_tokens = 10000
+[agents.marketing]
+max_output_tokens = 3500
+max_input_tokens = 10000
+[agents.sales]
+max_output_tokens = 3000
+max_input_tokens = 10000
+[agents.operations]
+max_output_tokens = 2000
+max_input_tokens = 8000
+[agents.qa]
+max_output_tokens = 3000
+max_input_tokens = 14000
+[agents.analytics]
+max_output_tokens = 2500
+max_input_tokens = 8000
+
+[web_search]
+enabled = true
+max_calls_per_run = 8
+cost_per_call_usd = 0.01         # gehostete Websuche, Preis prüfen
+estimated_calls_per_research_task = 4
+
+[orchestrator]
+concurrency = 3                  # parallele Agentenaufrufe bei unabhängigen Aufgaben
+ceo_review_each_run = true
+max_followup_tasks = 2           # max. dynamisch vom CEO angeforderte Zusatzaufgaben gesamt
+retry_backoff_seconds = 2.0
+run_stale_after_seconds = 900    # Lauf ohne Heartbeat gilt danach als abgestürzt
+call_timeout_seconds = 180
+
+[experiment]
+days = 30
+# "calendar": Tag = Kalendertage seit Start. "accelerated": jeder Lauf rückt days_per_run Tage vor (für Dry-Run/Demo)
+clock = "calendar"
+days_per_run = 5
+min_idea_score = 55              # Mindestpunktzahl für die Auswahl einer Idee
+
+[approvals]
+default_expiry_hours = 168
+max_recipients_per_message = 25
+
+[scheduler]
+interval_minutes = 360
+max_runs_per_day = 4
+
+[server]
+host = "127.0.0.1"
+port = 8765

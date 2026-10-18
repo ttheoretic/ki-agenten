@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aicompany"
+version = "0.1.0"
+description = "Autonomes KI-Unternehmen: Multi-Agent-Team mit Orchestrator, Budget- und Freigabekontrolle und Live-Control-Center"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "openai-agents==0.24.0",
+  "fastapi==0.146.0",
+  "uvicorn==0.54.0",
+  "pydantic==2.14.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1", "httpx==0.28.1"]
+
+[project.scripts]
+aicompany = "aicompany.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aicompany = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,62 @@
+# Sicherheitsrichtlinie. Wird beim Start schreibgeschützt geladen und per Fingerprint überwacht.
+# Agenten haben KEIN Werkzeug, um diese Datei zu ändern (sie liegt außerhalb des Arbeitsverzeichnisses).
+
+# Aktionen, die die Agenten ohne Freigabe durchführen dürfen (rein intern)
+auto_allowed = [
+  "web_research", "workspace_write", "workspace_read", "local_static_checks",
+  "internal_analysis", "task_management", "draft_marketing", "read_metrics",
+]
+
+# Externe Aktionen: nur über einen Freigabeantrag mit menschlicher Genehmigung
+approval_required = [
+  "publish_website", "publish_content", "send_message", "paid_ads",
+  "purchase", "subscription", "contract", "payment",
+  "deploy_production", "process_personal_data", "request_permission",
+]
+
+# Grundsätzlich verboten, auch mit Freigabe nicht ausführbar
+forbidden = [
+  "shell_exec", "admin_access", "read_outside_workspace", "share_credentials",
+  "modify_security_policy", "escalate_permissions", "mass_message", "bypass_checks",
+]
+
+# Erlaubte Werkzeuge je Agent und beschreibbare Unterverzeichnisse im Workspace
+[agents.ceo]
+tools = ["workspace_read", "workspace_write", "task_management"]
+write_dirs = ["ceo", "reports"]
+[agents.research]
+tools = ["web_search", "workspace_read", "workspace_write"]
+write_dirs = ["research"]
+[agents.strategy]
+tools = ["workspace_read", "workspace_write"]
+write_dirs = ["strategy"]
+[agents.finance]
+tools = ["workspace_read", "workspace_write"]
+write_dirs = ["finance"]
+[agents.product]
+tools = ["workspace_read", "workspace_write"]
+write_dirs = ["product_spec"]
+[agents.builder]
+tools = ["workspace_read", "workspace_write", "local_static_checks"]
+write_dirs = ["product", "site", "builder"]
+[agents.marketing]
+tools = ["workspace_read", "workspace_write", "propose_external_action"]
+write_dirs = ["marketing"]
+[agents.sales]
+tools = ["workspace_read", "workspace_write", "propose_external_action"]
+write_dirs = ["sales"]
+[agents.operations]
+tools = ["workspace_read", "workspace_write", "propose_external_action"]
+write_dirs = ["operations"]
+[agents.qa]
+tools = ["workspace_read", "workspace_write", "local_static_checks"]
+write_dirs = ["qa"]
+[agents.analytics]
+tools = ["workspace_read", "workspace_write", "read_metrics"]
+write_dirs = ["analytics"]
+
+[limits]
+max_file_bytes = 200000
+max_files_per_build = 20
+allowed_build_extensions = [".html", ".css", ".js", ".md", ".txt", ".json", ".svg"]
+max_file_view_bytes = 300000
