@@ -48,7 +48,7 @@ def _backend(monkeypatch, behaviour):
     from aicompany.llm import openai_backend
     b = openai_backend.OpenAIAgentsBackend(api_key="sk-test-xxxxxxxxxxxxxxxxxxxx")
 
-    async def fake_run(agent, prompt, max_turns):
+    async def fake_run(agent, prompt, max_turns, **kw):
         return behaviour(agent)
 
     monkeypatch.setattr(b._agents.Runner, "run", staticmethod(fake_run))

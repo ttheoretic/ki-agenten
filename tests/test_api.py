@@ -56,7 +56,7 @@ def test_state_reflects_real_status(client, company):
 def test_agent_detail(client, company):
     run(company)
     d = client.get("/api/agents/builder").json()
-    assert d["tools"] == ["workspace_read", "workspace_write", "local_static_checks"]
+    assert d["tools"] == ["workspace_read", "workspace_write", "local_static_checks", "code_workbench"]
     assert d["completed_tasks"] or d["queue"]
     assert any(e["to_agent"] == "builder" for e in d["communications"])
     assert client.get("/api/agents/nobody").status_code == 404

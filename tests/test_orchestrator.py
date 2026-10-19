@@ -35,10 +35,11 @@ def test_full_dry_run_cycle_completes(company):
     # Externe Aktionen nur als Freigabeantrag
     aps = company.approvals.list()
     aps = [a for a in aps if company.tasks.get(a.task_id).cycle == 1]
-    assert {a.action_type for a in aps} == {"publish_website", "publish_content", "paid_ads"}
+    assert {a.action_type for a in aps} == {"publish_website", "deploy_app", "publish_content", "paid_ads"}
     assert all(a.status == "pending" and a.execution_status == "not_started" for a in aps)
     # Dateien im Workspace erzeugt
-    assert (company.settings.workspace_dir / "product" / "index.html").exists()
+    assert (company.settings.workspace_dir / "product" / "app" / "main.py").exists()
+    assert company.tasks.get_by_key("p2.builder.product").result["derived"]["test_run"]["passed"]
     assert (company.settings.workspace_dir / "site" / "impressum.html").exists()
     # Meilensteine und Berichte
     assert len([e for e in company.events.list(types=["milestone.achieved"]) if "Zyklus 1" in e.message]) == 5
@@ -149,11 +150,10 @@ def test_ceo_cannot_execute_specialist_task(company):
 
 
 def test_build_path_traversal_rejected(make_company):
-    c2 = make_company(backend=MockBackend(semantic_invalid_plan={"p2.builder.product": 1}))
-    for _ in range(3):
-        run(c2)
+    c2 = make_company(backend=MockBackend(semantic_invalid_plan={"p3.builder.landing": 1}))
+    run_until_finished(c2)
     assert c2.events.list(types=["security.violation"])
-    assert c2.tasks.get_by_key("p2.builder.product").revision_count >= 1
+    assert c2.tasks.get_by_key("p3.builder.landing").revision_count >= 1
     assert not (c2.settings.data_dir / "escape.sh").exists()
     assert not (c2.settings.workspace_dir / "escape.sh").exists()
 

@@ -11,7 +11,7 @@ auto_allowed = [
 approval_required = [
   "publish_website", "publish_content", "send_message", "paid_ads",
   "purchase", "subscription", "contract", "payment",
-  "deploy_production", "process_personal_data", "request_permission",
+  "deploy_production", "deploy_app", "process_personal_data", "request_permission",
 ]
 
 # Grundsätzlich verboten, auch mit Freigabe nicht ausführbar
@@ -37,7 +37,7 @@ write_dirs = ["finance"]
 tools = ["workspace_read", "workspace_write"]
 write_dirs = ["product_spec"]
 [agents.builder]
-tools = ["workspace_read", "workspace_write", "local_static_checks"]
+tools = ["workspace_read", "workspace_write", "local_static_checks", "code_workbench"]
 write_dirs = ["builder", "product", "site"]
 [agents.marketing]
 tools = ["workspace_read", "workspace_write", "propose_external_action"]

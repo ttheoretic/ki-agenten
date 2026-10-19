@@ -22,6 +22,11 @@ class PublishWebsiteParams(BaseModel):
     target: Literal["local_release"] = "local_release"
 
 
+class DeployAppParams(BaseModel):
+    source_dir: str = Field(description="Workspace-relativer Ordner der App, z. B. product")
+    target: Literal["local_release"] = "local_release"
+
+
 class PublishContentParams(BaseModel):
     platform: str
     content_path: str
@@ -59,6 +64,7 @@ class GenericParams(BaseModel):
 
 PARAM_SCHEMAS: dict[str, type[BaseModel]] = {
     "publish_website": PublishWebsiteParams,
+    "deploy_app": DeployAppParams,
     "publish_content": PublishContentParams,
     "send_message": SendMessageParams,
     "paid_ads": SpendParams,
@@ -107,6 +113,23 @@ def _publish_website(params: PublishWebsiteParams, ctx: ExecutionContext) -> Exe
     )
 
 
+def _deploy_app(params: DeployAppParams, ctx: ExecutionContext) -> ExecutionResult:
+    src = (ctx.workspace / params.source_dir).resolve()
+    if ctx.workspace.resolve() not in src.parents or not (src / "app" / "main.py").exists():
+        return ExecutionResult("failed", f"Keine Web-App (app/main.py) in {params.source_dir}", False, {})
+    if not (src / "Dockerfile").exists():
+        return ExecutionResult("failed", "Dockerfile fehlt – die App kann nicht ausgerollt werden", False, {})
+    dest = ctx.releases_dir / ctx.approval_id
+    if not dest.exists():
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    return ExecutionResult(
+        "manual_required",
+        "Release-Paket mit Dockerfile erstellt. Es ist noch kein Hosting-Anbieter angebunden – bitte z. B. bei Render/Fly.io "
+        "aus dem Paket deployen und danach hier bestätigen.",
+        False, {"release_dir": str(dest)},
+    )
+
+
 def _send_message(params: SendMessageParams, ctx: ExecutionContext) -> ExecutionResult:
     ctx.outbox_dir.mkdir(parents=True, exist_ok=True)
     path = ctx.outbox_dir / f"{ctx.approval_id}.eml"
@@ -135,5 +158,6 @@ def _manual(action: str) -> Callable[[BaseModel, ExecutionContext], ExecutionRes
 EXECUTORS: dict[str, Callable[[BaseModel, ExecutionContext], ExecutionResult]] = {
     "publish_website": _publish_website,  # type: ignore[dict-item]
     "send_message": _send_message,  # type: ignore[dict-item]
-    **{a: _manual(a) for a in PARAM_SCHEMAS if a not in ("publish_website", "send_message")},
+    "deploy_app": _deploy_app,  # type: ignore[dict-item]
+    **{a: _manual(a) for a in PARAM_SCHEMAS if a not in ("publish_website", "send_message", "deploy_app")},
 }

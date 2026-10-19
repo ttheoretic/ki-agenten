@@ -10,6 +10,10 @@ Das Unternehmen **läuft dauerhaft in Zyklen**:
 3. Am Ende jedes Zyklus entscheidet der CEO anhand echter Zahlen: **weiter**, **Kurswechsel** zur nächstbesten Idee
    oder **neue Nische** mit frischer Recherche. Gescheiterte Ideen werden gesperrt, Lehren gehen in den nächsten Zyklus ein.
 
+Der Programmier-Agent baut komplette, getestete Web-Apps (FastAPI, SQLite, Tests, Dockerfile). Er schreibt Code, führt
+Tests in einer abgeschotteten Umgebung aus, behebt Fehler, und QA macht ein Code-Review. Welche Geschäftsmodelle sich für
+ein KI-Team eignen, steht in [docs/GESCHAEFTSMODELLE.md](docs/GESCHAEFTSMODELLE.md).
+
 Die Agenten arbeiten als Team: Sie bitten Kollegen um Hilfe, warten bei Bedarf auf deren Zuarbeit und bieten von sich aus
 Unterstützung an, wenn Arbeit zurückgegeben wird (siehe [AGENTS.md](AGENTS.md#teamarbeit-zwischen-den-agenten)).
 Der Eigentümer beobachtet nur und entscheidet über Freigaben.
@@ -85,6 +89,10 @@ aicompany --mode live scheduler --interval 360 --max-runs 8
 
 Zusätzlich empfohlen: ein **Ausgabenlimit im OpenAI-Konto** und ein eigener API-Schlüssel nur für dieses Projekt.
 
+**Sandbox für generierten Code (empfohlen):** Mit installiertem Docker einmal `docker build -t aicompany-sandbox sandbox/`
+ausführen. Dann laufen die Tests des Programmier-Agenten ohne Netzwerk im Container. Ohne Docker läuft ein abgesicherter
+Subprozess (siehe SECURITY.md).
+
 ### Wiederkehrende Ausführung per cron (Alternative zum Scheduler)
 
 ```cron
@@ -121,7 +129,7 @@ Globale Optionen: `--mode dry_run|live`, `--data-dir PFAD`. Daten liegen getrenn
 ## Tests
 
 ```bash
-python -m pytest                      # Backend: 110 Tests, keine API-Kosten
+python -m pytest                      # Backend: 146 Tests, keine API-Kosten (≈ 4–5 min)
 cd frontend && npm ci && npm test     # Frontend-Logik: 14 Tests (Vitest)
 npm run build                         # Typecheck + Produktionsbuild nach frontend/dist
 PW_CHROMIUM_PATH=/pfad/zu/chrome npx playwright test   # End-to-End im Browser gegen echtes Backend (Dry-Run)

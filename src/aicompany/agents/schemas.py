@@ -213,6 +213,8 @@ class UserFlow(BaseModel):
 
 
 class MVPSpec(TeamOutput):
+    product_type: Literal["web_app", "static_site"] = Field(
+        "web_app", description="web_app = Software mit Server/Datenbank (FastAPI); static_site = reine statische Seite/Tool")
     product_name: str
     problem: str
     target_users: str
@@ -236,6 +238,46 @@ class BuildResult(TeamOutput):
     run_instructions: str
     known_limitations: list[str]
     feature_coverage: list[str] = Field(description="Feature-IDs aus der Spezifikation, die umgesetzt wurden")
+
+
+class Component(BaseModel):
+    name: str
+    responsibility: str
+
+
+class Entity(BaseModel):
+    name: str
+    fields: list[str]
+
+
+class Endpoint(BaseModel):
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+    path: str
+    purpose: str
+
+
+class PlannedFile(BaseModel):
+    path: str
+    purpose: str
+
+
+class TechDesign(TeamOutput):
+    architecture: str = Field(description="Kurzbeschreibung: FastAPI-App, SQLite, HTML-Oberfläche, Tests mit pytest")
+    components: list[Component]
+    data_model: list[Entity]
+    api_endpoints: list[Endpoint]
+    file_plan: list[PlannedFile]
+    test_plan: list[str]
+    risks: list[str]
+
+
+class ImplementationReport(TeamOutput):
+    summary: str
+    files_changed: list[str]
+    tests_passed: bool = Field(description="Ergebnis des letzten run_tests-Aufrufs")
+    feature_coverage: list[str] = Field(description="Umgesetzte Feature-IDs aus der Spezifikation")
+    known_issues: list[str]
+    run_instructions: str
 
 
 class ProposedAction(BaseModel):
@@ -431,4 +473,6 @@ OUTPUT_SCHEMAS: dict[str, type[BaseModel]] = {
     "analytics_review": AnalyticsReview,
     "final_decision": FinalDecision,
     "consultation": Consultation,
+    "tech_design": TechDesign,
+    "implement": ImplementationReport,
 }

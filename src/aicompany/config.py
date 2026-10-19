@@ -74,6 +74,14 @@ class CollaborationConfig(BaseModel):
     offer_help_on_revision: bool = True
 
 
+class BuilderConfig(BaseModel):
+    execution: Literal["auto", "docker", "subprocess", "off"] = "auto"
+    test_timeout_seconds: int = Field(90, ge=10, le=600)
+    max_turns: int = Field(30, ge=4, le=80)
+    agentic_cost_factor: float = Field(8.0, ge=1.0)
+    max_files: int = Field(60, ge=5, le=300)
+
+
 class ExperimentConfig(BaseModel):
     days: int = 30
     clock: Literal["calendar", "accelerated"] = "calendar"
@@ -113,6 +121,7 @@ class Settings(BaseModel):
     orchestrator: OrchestratorConfig = OrchestratorConfig()
     experiment: ExperimentConfig = ExperimentConfig()
     collaboration: CollaborationConfig = CollaborationConfig()
+    builder: BuilderConfig = BuilderConfig()
     approvals: ApprovalsConfig = ApprovalsConfig()
     scheduler: SchedulerConfig = SchedulerConfig()
     server: ServerConfig = ServerConfig()

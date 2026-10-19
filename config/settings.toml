@@ -57,7 +57,7 @@ max_input_tokens = 10000
 max_output_tokens = 3000
 max_input_tokens = 10000
 [agents.builder]
-max_output_tokens = 8000
+max_output_tokens = 12000
 max_input_tokens = 10000
 [agents.marketing]
 max_output_tokens = 3500
@@ -94,6 +94,15 @@ enabled = true
 max_consultations_per_run = 4   # Hilfeanfragen/-angebote zählen als Agentenaufrufe (Budget!)
 max_blocking_help_per_task = 1  # wie oft eine Aufgabe auf Kollegenhilfe warten darf
 offer_help_on_revision = true   # bei Rückgabe zur Überarbeitung bietet ein passender Kollege Hilfe an
+
+[builder]
+# Wie der Programmier-Agent Tests ausführt: auto = Docker (ohne Netzwerk), falls Image 'aicompany-sandbox' vorhanden,
+# sonst abgesicherter Subprozess; off = gar nicht ausführen.
+execution = "auto"
+test_timeout_seconds = 90
+max_turns = 30                  # maximale Arbeitsschritte (Werkzeugaufrufe) pro Implementierungsauftrag
+agentic_cost_factor = 8.0       # Kostenschätzung für mehrstufige Arbeit = Einzelaufruf × Faktor (wird als Obergrenze erzwungen)
+max_files = 60
 
 [experiment]
 days = 30

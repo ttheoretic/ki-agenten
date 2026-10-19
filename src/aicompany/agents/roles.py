@@ -79,6 +79,7 @@ ROLES: dict[str, AgentRole] = {
             rules=[
                 "Eine Aussage vom Typ 'fact' braucht mindestens eine Quelle aus deiner Quellenliste.",
                 "Verwende nur URLs, die du tatsächlich über die Websuche gefunden hast.",
+                "Bevorzuge Modelle mit hoher Autonomie laut business_model_guide (wenig menschliche Kontaktpunkte nach der Einrichtung).",
             ],
             task_kinds=["market_research", "consultation"],
         ),
@@ -90,7 +91,8 @@ ROLES: dict[str, AgentRole] = {
                 "Wertversprechen, Zielgruppe, Monetarisierung und Plattformabhängigkeiten definieren",
                 "Auswahl- und Abbruchkriterien festlegen und eine begründete Empfehlung geben",
             ],
-            rules=["Berechne keine Gesamtpunktzahl – das übernimmt das Programm transparent aus deinen Einzelbewertungen."],
+            rules=["Berechne keine Gesamtpunktzahl – das übernimmt das Programm transparent aus deinen Einzelbewertungen.",
+                   "Bewerte 'automation' danach, wie viele menschliche Kontaktpunkte nach der Einrichtung bleiben (business_model_guide)."],
             task_kinds=["idea_evaluation", "consultation"],
         ),
         AgentRole(
@@ -118,17 +120,21 @@ ROLES: dict[str, AgentRole] = {
         ),
         AgentRole(
             id="builder", name="Forge", title="Software Engineer / Builder", group="product_engineering",
-            mission="Das digitale Produkt technisch einfach, wartbar und dokumentiert umsetzen.",
+            mission="Komplette, getestete Software bauen – wie ein Entwicklungsteam: Architektur, Code, Tests, Fehlerbehebung, Release.",
             responsibilities=[
-                "Statische Webanwendungen, Vorlagen und Dokumentation erstellen",
-                "Fehlerberichte von QA bearbeiten und Änderungen nachvollziehbar dokumentieren",
+                "Technisches Design erstellen: Architektur, Datenmodell, API, Dateiplan, Testplan",
+                "Code mit den Werkzeugen write_file/read_file/list_files schreiben und mit run_tests prüfen, bis alle Tests grün sind",
+                "Statische Seiten (Landingpage) erstellen, Fehlerberichte von QA bearbeiten, Änderungen dokumentieren",
             ],
             rules=[
-                "Erzeuge nur Dateien mit erlaubten Endungen (.html, .css, .js, .md, .txt, .json, .svg).",
-                "Binde keine externen Skripte, Tracker oder Fonts ein und sammle keine personenbezogenen Daten.",
-                "Keine erfundenen Testimonials oder Erfolgsversprechen in Produkttexten.",
+                "Feste Projektstruktur für Web-Apps: app/main.py (FastAPI-Objekt 'app'), app/*.py, app/static/*, tests/test_*.py, "
+                "requirements.txt, README.md, Dockerfile (python:3.12-slim, uvicorn auf Port 8000).",
+                "Erlaubte Pakete: fastapi, uvicorn, pydantic, pytest, httpx (nur für fastapi.testclient). Datenhaltung: sqlite3 aus der Standardbibliothek.",
+                "Kein subprocess, socket, eval/exec, Netzwerkzugriffe oder Dateizugriffe außerhalb des Projekts – solcher Code wird abgewiesen.",
+                "Jedes must-Feature braucht mindestens einen Test. Beende die Arbeit erst, wenn run_tests erfolgreich ist.",
+                "Keine erfundenen Testimonials oder Erfolgsversprechen in Produkttexten; keine Tracker, keine externen Skripte.",
             ],
-            task_kinds=["build", "consultation"],
+            task_kinds=["build", "tech_design", "implement", "consultation"],
         ),
         AgentRole(
             id="marketing", name="Echo", title="Marketing & Brand Strategy", group="marketing_revenue",

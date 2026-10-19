@@ -178,6 +178,13 @@ def validate(kind: str, output: BaseModel, *, ctx: dict[str, Any], policy: Secur
             if any(h.status in ("supported", "rejected") for h in output.hypothesis_results):
                 errors.append("Ohne Messdaten kann keine Hypothese bestätigt oder widerlegt werden")
 
+    elif isinstance(output, S.TechDesign):
+        paths = {f.path for f in output.file_plan}
+        if "app/main.py" not in paths or not any(p.startswith("tests/") for p in paths):
+            errors.append("Dateiplan braucht app/main.py und mindestens eine Testdatei unter tests/")
+        if not output.api_endpoints or not output.test_plan:
+            errors.append("API-Endpunkte und Testplan sind Pflicht")
+
     elif isinstance(output, S.Consultation):
         if len(output.answer.strip()) < 10:
             errors.append("Die Antwort an den Kollegen ist leer oder zu knapp")

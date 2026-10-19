@@ -1,0 +1,76 @@
+# Leitfaden für Research und Strategy: Welche Geschäftsmodelle kann ein KI-Team weitgehend allein betreiben?
+# autonomy: 0 = braucht ständig Menschen, 1 = läuft nach Einrichtung ohne Menschen.
+# Siehe docs/GESCHAEFTSMODELLE.md für Begründung und Quellen. Wird den Agenten als Ausgangspunkt mitgegeben,
+# die Recherche darf davon abweichen, wenn Belege dafür sprechen.
+
+[[models]]
+id = "web_tools"
+name = "Kleine Web-Tools zum Selbstbedienen (Rechner, Generatoren, Konverter)"
+autonomy = 0.85
+revenue = "Einmalkauf oder kleines Abo, Kreditkarte, sofortiger Zugang"
+human_once = ["Hosting-Konto", "Zahlungsanbieter (Identitätsprüfung)", "Domain", "Impressum/Steuern"]
+human_ongoing = ["Freigaben", "seltene Supportfälle"]
+risks = ["Wettbewerb durch kostenlose Tools", "Reichweite muss erst aufgebaut werden"]
+
+[[models]]
+id = "dev_api"
+name = "Entwickler-Tools und APIs (z. B. Webhook-Tester, Cron-Überwachung, PDF-/Bild-Erzeugung per API)"
+autonomy = 0.8
+revenue = "nutzungsabhängiges Abo, technische Kunden kaufen ohne Gespräch"
+human_once = ["Hosting", "Zahlungsanbieter", "Domain"]
+human_ongoing = ["Freigaben", "Ausfälle prüfen"]
+risks = ["Betriebssicherheit (Ausfälle kosten Kunden)", "Missbrauch der API"]
+
+[[models]]
+id = "digital_templates"
+name = "Digitale Vorlagen und Arbeitshilfen (Excel/Notion/Checklisten/Formulare)"
+autonomy = 0.8
+revenue = "Einmalkauf im eigenen Shop (z. B. Lemon Squeezy, Digistore24) oder Marktplatz"
+human_once = ["Shop-Konto", "Steuern", "bei Etsy: KI-Kennzeichnung je Angebot"]
+human_ongoing = ["Freigaben"]
+risks = ["Marktplätze verlangen KI-Kennzeichnung", "niedrige Preise, viele Anbieter"]
+
+[[models]]
+id = "data_reports"
+name = "Automatisierte Daten- und Berichtsdienste (Nischen-Reports, Preisbeobachtung, Newsletter im Abo)"
+autonomy = 0.7
+revenue = "Monatsabo"
+human_once = ["Versanddienst", "Zahlungsanbieter", "Prüfung der Datenlizenzen"]
+human_ongoing = ["Stichproben der Qualität"]
+risks = ["Nutzungsbedingungen der Datenquellen", "Fehler in Berichten schaden Vertrauen"]
+
+[[models]]
+id = "content_affiliate"
+name = "Ratgeber- und Vergleichsseiten mit Affiliate-Links"
+autonomy = 0.5
+revenue = "Provision"
+human_once = ["Affiliate-Konten"]
+human_ongoing = ["Qualitätskontrolle"]
+risks = ["Google stuft massenhaft erzeugte Inhalte ab (Scaled Content Abuse)", "Monate bis zu Einnahmen"]
+
+[[models]]
+id = "ebooks"
+name = "E-Books / Low-Content-Bücher (Amazon KDP)"
+autonomy = 0.45
+revenue = "Tantiemen"
+human_once = ["KDP-Konto", "Steuerformulare"]
+human_ongoing = ["KI-Angaben je Titel"]
+risks = ["Uploadlimit (gemeldet: 3 Titel/Tag)", "Pflicht zur KI-Angabe", "niedrige Preise"]
+
+[[models]]
+id = "b2b_complex_saas"
+name = "Komplexe Branchen-Software (z. B. Werkstatt-/ERP-Software)"
+autonomy = 0.2
+revenue = "hohe Abos, aber lange Verkaufszyklen"
+human_once = ["Hosting", "Verträge (AVV)", "Zahlungsanbieter"]
+human_ongoing = ["Demos", "Kundengespräche", "Integrationen", "Support"]
+risks = ["Vertrauen und Haftung", "Kunden kaufen selten ohne Vorführung"]
+
+[[models]]
+id = "agency"
+name = "Dienstleistungen auf Auftrag (Texte, Websites für Kunden)"
+autonomy = 0.3
+revenue = "Projekthonorar"
+human_once = []
+human_ongoing = ["Kundenkommunikation", "Abstimmungen", "Rechnungen und Reklamationen"]
+risks = ["Skaliert nur mit Menschen"]

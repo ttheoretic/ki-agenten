@@ -39,6 +39,7 @@
 | `llm/` | Austauschbare Backends: `MockBackend` (Dry-Run, Fehlerinjektion) und `OpenAIAgentsBackend` |
 | `workflow.py` | Phasen, 20 Aufgabenvorlagen mit Abhängigkeiten, Meilensteine, Experimentuhr |
 | `orchestrator.py` | Geschäftslauf: Lock, Wiederanlauf, CEO-Review, parallele Batches, Retries, Validierung, Überarbeitung, Handler |
+| `workbench.py` | Werkbank des Builders: Projektdateien in der Sandbox, isolierte Testausführung (Docker/Subprozess) |
 | `processing.py`, `checks.py` | Inhaltliche Validierung (Quellen, Kennzahlen, Werbeaussagen, Pfade) und statische Codeprüfungen |
 | `scoring.py`, `finance.py` | Transparente Punktzahl + Auswahlregeln; Break-even/Szenarien |
 | `approvals.py`, `actions.py` | Freigabeanträge, Hash-Bindung, idempotente Ausführung, ehrliche Ausführer |

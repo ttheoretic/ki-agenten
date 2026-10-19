@@ -40,6 +40,15 @@ FOLLOWUP_KINDS = {"research": "market_research", "strategy": "idea_evaluation", 
 MAX_TASK_ATTEMPTS = 6
 
 
+def load_business_models() -> list[dict]:
+    """Leitfaden, welche Geschäftsmodelle ein KI-Team weitgehend allein betreiben kann (config/business_models.toml)."""
+    import tomllib
+
+    from .config import PROJECT_ROOT
+    path = PROJECT_ROOT / "config" / "business_models.toml"
+    return tomllib.loads(path.read_text(encoding="utf-8")).get("models", []) if path.exists() else []
+
+
 class RunActive(Exception):
     pass
 
@@ -278,6 +287,8 @@ class Orchestrator:
                                "company_memory": self._company_memory()}
         if task.kind in ("market_research", "idea_evaluation", "ceo_decision"):
             ctx["excluded_ideas"] = ctx["company_memory"]["tried_ideas"]
+        if task.kind in ("market_research", "idea_evaluation"):
+            ctx["business_model_guide"] = load_business_models()
         if task.kind == "idea_evaluation" and "market_research" not in deps_by_kind:
             latest = self._latest_output("market_research")  # Kurswechsel: vorhandene Recherche neu bewerten
             if latest:
@@ -296,12 +307,23 @@ class Orchestrator:
             positioning = self._result_output(self.k("p3.marketing.positioning")) or self._latest_output("positioning")
             if not deps_by_kind["positioning"] and positioning:
                 deps_by_kind["positioning"].append(positioning)
+        if task.kind in ("tech_design", "implement"):
+            ctx["target_dir"] = task.inputs.get("target_dir", "product")
+            ctx["mvp_spec"] = (deps_by_kind.get("mvp_spec") or [None])[-1] or self._result_output(self.k("p2.product.mvp_spec"))
+        if task.kind == "implement":
+            ctx["tech_design"] = (deps_by_kind.get("tech_design") or [None])[-1] or self._latest_output("tech_design")
+            ctx["project_files"] = self._workbench(task).list_files()
+            ctx["last_test_run"] = ((task.result or {}).get("derived") or {}).get("test_run")
         if task.kind == "qa_review":
             target = by_key.get(task.inputs.get("review_target", ""))
             if target:
                 ctx["review_target"] = {"id": target.id, "key": target.key, "kind": target.kind, "agent": target.agent,
                                         "revision_count": target.revision_count, "output": (target.result or {}).get("output")}
                 ctx["automated_checks"] = (target.result or {}).get("derived", {}).get("automated_checks")
+                if target.kind == "implement":  # QA liest den Code wie bei einem Code-Review
+                    wb = self._workbench(target)
+                    ctx["code"] = {f: wb.read_file(f)[:4000] for f in [x for x in wb.list_files() if x.endswith(".py")][:8]}
+                    ctx["test_run"] = (target.result or {}).get("derived", {}).get("test_run")
         if task.kind == "ceo_decision":
             tried = set(ctx["excluded_ideas"])
             ctx["scorecards"] = [sc for sc in self._result_derived(self.k("p1.strategy.evaluate")).get("scorecards", [])
@@ -350,7 +372,7 @@ class Orchestrator:
                 tools.remove("web_search")
         return tools
 
-    async def _call_agent(self, task: Task, ctx: dict[str, Any]):
+    async def _call_agent(self, task: Task, ctx: dict[str, Any], workbench=None):
         c = self.c
         role = ROLES[task.agent]
         prompt = self._prompt(task, ctx)
@@ -363,6 +385,10 @@ class Orchestrator:
                          tools=tools, context=ctx, revision=task.revision_count, feedback=task.feedback)
         web_est = self.cfg.web_search.estimated_calls_per_research_task if "web_search" in tools else 0
         estimate = c.budget.estimate_call(model, len(prompt) + len(call.instructions), limits.max_output_tokens, web_est)
+        if workbench is not None:  # mehrstufige Entwicklerarbeit: Obergrenze wird während der Arbeit erzwungen
+            estimate = round(estimate * self.cfg.builder.agentic_cost_factor, 6)
+            call.workbench, call.max_turns = workbench, self.cfg.builder.max_turns
+            call.cost_cap_eur, call.cost_fn = estimate, c.budget.cost_eur
         c.tasks.set_fields(task.id, est_cost_eur=estimate)
         attempts = self.cfg.budget.max_attempts_per_call
         for attempt in range(1, attempts + 1):
@@ -438,8 +464,9 @@ class Orchestrator:
                               from_agent=dep.agent, to_agent=task.agent, task_id=task.id, run_id=self.run.run_id,
                               data={"comm_kind": "handoff", "source_task": dep.id, "artifacts": dep.artifacts})
         ctx = self._context(task)
+        workbench = self._workbench(task, live_events=True) if task.kind == "implement" else None
         try:
-            res, model = await self._call_agent(task, ctx)
+            res, model = await self._call_agent(task, ctx, workbench)
         except _ApiDown as exc:
             c.tasks.transition(task.id, TS.PENDING, note=f"API nicht erreichbar: {exc}", expected={TS.IN_PROGRESS},
                                updates={"error": str(exc)})
@@ -467,6 +494,10 @@ class Orchestrator:
         output = res.output
         errors, derived = validate(task.kind, output, ctx=ctx, policy=c.policy, sandbox=c.sandbox, agent=task.agent,
                                    cited_urls=res.cited_urls, simulated=res.simulated)
+        if workbench is not None:
+            more_errors, more = await asyncio.to_thread(self._check_implementation, task, output, workbench, ctx)
+            errors += more_errors
+            derived.update(more)
         if derived.get("security_violation"):
             c.events.emit("security.violation", f"Unzulässiger Dateizugriff von {role.name} abgewiesen", agent=task.agent,
                           task_id=task.id, run_id=self.run.run_id, severity="error", data={"errors": errors[:5]})
@@ -555,6 +586,64 @@ class Orchestrator:
             " ON CONFLICT(path) DO UPDATE SET task_id=excluded.task_id, sha256=excluded.sha256, size=excluded.size, created_at=excluded.created_at",
             (rel, task.id, task.agent, task.kind, hashlib.sha256(data).hexdigest()[:16], len(data), now_iso()),
         )
+
+    # ================= Software-Entwicklung =================
+    REQUIRED_APP_FILES = ("app/main.py", "requirements.txt", "README.md", "Dockerfile")
+
+    def _workbench(self, task: Task, live_events: bool = False):
+        from .workbench import Workbench
+        c, b = self.c, self.cfg.builder
+
+        def on_event(kind: str, msg: str, data: dict) -> None:
+            if live_events:
+                c.events.emit(kind, f"{ROLES[task.agent].name}: {msg}", agent=task.agent, task_id=task.id,
+                              run_id=self.run.run_id if self.run else None,
+                              severity="debug" if kind == "code.file_written" else "info" if data.get("passed", True) else "warning",
+                              data=data)
+
+        return Workbench(c.sandbox, task.agent, task.inputs.get("target_dir", "product"), c.redactor, mode=b.execution,
+                         timeout=b.test_timeout_seconds, max_files=b.max_files,
+                         max_file_bytes=c.policy.limits.max_file_bytes, on_event=on_event)
+
+    def _check_implementation(self, task: Task, output: S.ImplementationReport, wb, ctx: dict) -> tuple[list[str], dict]:
+        """Wie eine CI-Pipeline: Pflichtdateien, Codeprüfung und Tests werden vom Programm selbst ausgeführt."""
+        files = wb.list_files()
+        errors: list[str] = []
+        missing = [f for f in self.REQUIRED_APP_FILES if f not in files]
+        has_tests = any(f.startswith("tests/") and f.endswith(".py") and "test_" in f for f in files)
+        if missing:
+            errors.append(f"Pflichtdateien fehlen: {', '.join(missing)}")
+        if not has_tests:
+            errors.append("Keine Tests vorhanden (tests/test_*.py)")
+        # Autoritativer Testlauf: nur wiederholen, wenn nach dem letzten Lauf noch Dateien geändert wurden
+        run = wb.test_runs[-1] if wb.test_runs and not wb.dirty else wb.run_tests()
+        problems = run.problems
+        if problems:
+            errors.append("Codeprüfung abgewiesen: " + "; ".join(problems[:5]))
+        if run.executed and not run.passed:
+            errors.append(f"Tests schlagen fehl: {run.summary}. Ausgabe: {run.output[-800:]}")
+        spec = ctx.get("mvp_spec") or {}
+        musts = {f["id"] for f in spec.get("features", []) if f.get("priority") == "must"}
+        if musts - set(output.feature_coverage):
+            errors.append(f"must-Features nicht umgesetzt: {sorted(musts - set(output.feature_coverage))}")
+        checks = [
+            {"name": "Pflichtdateien vorhanden", "passed": not missing and has_tests, "detail": ", ".join(missing) or "ok"},
+            {"name": "Codeprüfung (Sicherheit)", "passed": not problems, "detail": "; ".join(problems[:3]) or "ok"},
+            {"name": "Tests (pytest)", "passed": run.passed or not run.executed,
+             "detail": run.summary if run.executed else f"nicht ausgeführt ({run.summary})"},
+        ]
+        derived = {"test_run": run.as_dict(), "written_files": [f"{wb.root}/{f}" for f in wb.written],
+                   "automated_checks": {"passed": all(ch["passed"] for ch in checks), "checks": checks, "files": files},
+                   "test_runs_during_work": len(wb.test_runs)}
+        return errors, derived
+
+    def _handle_implement(self, task: Task, output: S.ImplementationReport, derived: dict) -> str:
+        run = derived.get("test_run", {})
+        self.c.events.emit("code.changed", f"{ROLES[task.agent].name}: {'Überarbeitete ' if task.revision_count else ''}Version der Software "
+                           f"({len(derived.get('written_files', []))} Dateien) – {run.get('summary', 'keine Tests')}",
+                           agent=task.agent, task_id=task.id, run_id=self.run.run_id,
+                           severity="success" if run.get("passed") else "warning", data={"files": derived.get("written_files", [])})
+        return "accept"
 
     # ================= Teamarbeit =================
     def _team_notes(self, task: Task) -> list[dict]:

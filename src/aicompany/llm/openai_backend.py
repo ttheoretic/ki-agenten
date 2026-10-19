@@ -12,6 +12,64 @@ from ..budget import CallUsage
 from .base import AgentCall, AgentCallResult, LLMFatalError, LLMOutputError, LLMTransientError
 
 
+class CostCapReached(Exception):
+    """Der laufende Auftrag hat seine Kostenobergrenze erreicht und wurde gestoppt."""
+
+
+def workbench_tools(agents_mod, wb):
+    """Werkzeuge des Software-Teams als SDK-Function-Tools. Fehler gehen als Text an das Modell zurück."""
+
+    def guarded(fn):
+        try:
+            return fn()
+        except Exception as exc:  # Sicherheitsregeln/Pfadfehler → Rückmeldung statt Absturz
+            return f"FEHLER: {exc}"
+
+    @agents_mod.function_tool
+    def list_files() -> str:
+        """Listet alle Dateien des Projekts auf."""
+        return guarded(lambda: "\n".join(wb.list_files()) or "(Projekt ist leer)")
+
+    @agents_mod.function_tool
+    def read_file(path: str) -> str:
+        """Liest eine Projektdatei.
+
+        Args:
+            path: Pfad relativ zum Projektordner, z. B. app/main.py
+        """
+        return guarded(lambda: wb.read_file(path))
+
+    @agents_mod.function_tool
+    def write_file(path: str, content: str) -> str:
+        """Legt eine Projektdatei an oder überschreibt sie vollständig.
+
+        Args:
+            path: Pfad relativ zum Projektordner, z. B. app/main.py oder tests/test_api.py
+            content: kompletter neuer Dateiinhalt
+        """
+        return guarded(lambda: wb.write_file(path, content))
+
+    @agents_mod.function_tool
+    def delete_file(path: str) -> str:
+        """Löscht eine Projektdatei.
+
+        Args:
+            path: Pfad relativ zum Projektordner
+        """
+        return guarded(lambda: wb.delete_file(path))
+
+    @agents_mod.function_tool
+    async def run_tests() -> str:
+        """Führt die Tests des Projekts (pytest) isoliert aus und liefert das Ergebnis."""
+        def go():
+            r = wb.run_tests()
+            head = "BESTANDEN" if r.passed else "NICHT BESTANDEN"
+            return f"{head}: {r.summary}\n" + "\n".join(r.problems) + "\n" + r.output[-2500:]
+        return await asyncio.to_thread(guarded, go)  # blockiert den Orchestrator (Heartbeat/Stopp) nicht
+
+    return [list_files, read_file, write_file, delete_file, run_tests]
+
+
 class OpenAIAgentsBackend:
     name = "openai-agents"
     simulated = False
@@ -32,6 +90,8 @@ class OpenAIAgentsBackend:
         tools = []
         if "web_search" in call.tools:
             tools.append(a.WebSearchTool(search_context_size="medium"))
+        if call.workbench is not None:
+            tools.extend(workbench_tools(a, call.workbench))
         return a.Agent(
             name=call.agent_id,
             instructions=call.instructions,
@@ -46,12 +106,26 @@ class OpenAIAgentsBackend:
 
         a = self._agents
         agent = self._build_agent(call)
+        hooks = None
+        if call.cost_cap_eur is not None and call.cost_fn is not None:
+            spent = {"eur": 0.0}
+
+            class CostGuard(a.RunHooks):
+                async def on_llm_end(self, context, agent, response):  # noqa: ARG002
+                    u = response.usage
+                    spent["eur"] += call.cost_fn(call.model, u.input_tokens, u.output_tokens)
+                    if spent["eur"] > call.cost_cap_eur:
+                        raise CostCapReached(f"Kostenobergrenze {call.cost_cap_eur:.3f} € erreicht ({spent['eur']:.3f} €)")
+
+            hooks = CostGuard()
+        max_turns = call.max_turns or (6 if call.tools else 2)
+        timeout = self.timeout * (4 if call.workbench is not None else 1)
         try:
-            result = await asyncio.wait_for(
-                a.Runner.run(agent, call.prompt, max_turns=6 if call.tools else 2), timeout=self.timeout
-            )
+            result = await asyncio.wait_for(a.Runner.run(agent, call.prompt, max_turns=max_turns, hooks=hooks), timeout=timeout)
+        except CostCapReached as exc:
+            raise LLMOutputError(f"Auftrag abgebrochen: {exc}") from exc
         except asyncio.TimeoutError as exc:
-            raise LLMTransientError(f"Zeitüberschreitung nach {self.timeout}s") from exc
+            raise LLMTransientError(f"Zeitüberschreitung nach {timeout}s") from exc
         except (openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError, openai.InternalServerError) as exc:
             raise LLMTransientError(f"{type(exc).__name__}: {exc}") from exc
         except (openai.AuthenticationError, openai.PermissionDeniedError, openai.NotFoundError, openai.BadRequestError) as exc:

@@ -5,16 +5,29 @@ dass ein Modell sich an Anweisungen hält.
 
 ## Schichten
 
-1. **Keine gefährlichen Werkzeuge.** Agenten bekommen höchstens die gehostete Websuche. Es gibt keine Shell, keinen
-   Code-Interpreter, kein Computer-Use und keine Dateisystem-Werkzeuge. Dateien schreibt ausschließlich das Programm,
-   nach Prüfung (`OpenAIAgentsBackend._build_agent`).
+1. **Keine gefährlichen Werkzeuge.** Agenten bekommen höchstens die gehostete Websuche. Nur der Builder hat zusätzlich
+   die Werkbank: Dateien im eigenen Projektordner lesen und schreiben sowie Tests ausführen, jeweils mit den Prüfungen
+   unter Punkt 4. Es gibt keine Shell, keinen Code-Interpreter und kein Computer-Use (`OpenAIAgentsBackend._build_agent`).
 2. **Default-Deny-Aktionsklassen** (`config/security.toml`): `auto_allowed`, `approval_required`, `forbidden`.
    Unbekannte Aktionen sind verboten. Verbotene Anträge werden abgewiesen und als `security.violation` protokolliert.
 3. **Sandbox** (`security.Sandbox`): nur relative Pfade innerhalb von `data/<modus>/workspace`, nur in den Ordnern des
    jeweiligen Agenten. `..`, absolute Pfade, `~`, Laufwerksbuchstaben und Symlinks werden abgelehnt. Es gelten Dateigrößen-,
    Dateianzahl- und Dateitypgrenzen. Die Konfiguration liegt außerhalb des Workspace und ist für Agenten unerreichbar.
-4. **Generierter Code wird nicht ausgeführt**, nur statisch geprüft: keine externen Skripte/Ressourcen, kein Tracking,
-   kein `eval`/`new Function`/`document.cookie`, keine Geheimnisse, keine unzulässigen Werbeaussagen, Pflichtseiten vorhanden.
+4. **Generierter Code nur geprüft und abgeschottet** (`checks.scan_python`, `workbench.py`):
+   - Jede Python-Datei wird vor dem Speichern per AST geprüft. Erlaubt sind nur die Standardbibliothek und freigegebene
+     Pakete (fastapi, pydantic, uvicorn, pytest). Verboten sind `subprocess`, `socket`, `ctypes`, Netzwerk-Clients,
+     `eval`/`exec`, `os.system` und Ähnliches, Pfade außerhalb des Projekts und nicht freigegebene Abhängigkeiten in
+     `requirements.txt`. Abgewiesener Code wird gar nicht erst gespeichert.
+   - Tests laufen in einer **Kopie** des Projekts:
+     - `docker` (empfohlen; `docker build -t aicompany-sandbox sandbox/`): ohne Netzwerk, schreibgeschütztes Dateisystem,
+       768 MB RAM, 1 CPU, Prozesslimit, unprivilegierter Nutzer.
+     - `subprocess` (Standard ohne Docker): leere Umgebung ohne Schlüssel, Zeit-, CPU-, Speicher- und Dateigrößenlimits.
+       **Netzwerk ist hier nicht technisch gesperrt**, nur durch die Codeprüfung.
+     - `off`: keine Ausführung.
+   - Statische Seiten (Landingpage) werden weiterhin nur statisch geprüft: keine externen Ressourcen, kein Tracking,
+     keine gefährlichen JS-Konstrukte.
+   - Mehrstufige Entwicklerarbeit hat eine harte Kostenobergrenze pro Auftrag. Sie wird während der Arbeit nach jedem
+     Modellaufruf geprüft (`CostGuard`); wird sie überschritten, bricht der Auftrag sofort ab.
 5. **Freigaben** (`approvals.py`):
    - Parameter werden per Schema validiert (z. B. E-Mail-Empfänger, Beträge) und sind danach unveränderlich (SHA-256-Hash).
    - Die Genehmigung muss den Hash bestätigen, den der Mensch gesehen hat. Manipulierte Parameter in der DB werden erkannt.
@@ -54,3 +67,5 @@ dass ein Modell sich an Anweisungen hält.
   Reverse-Proxy mit TLS und zusätzlicher Authentifizierung vorschalten.
 - Inhaltliche Richtigkeit (Recherche, Rechtstexte) kann das Programm nur begrenzt prüfen. Für Rechtliches haftet der Eigentümer.
 - Gehostete Websuchen innerhalb **eines** Aufrufs lassen sich nicht einzeln deckeln, nur über `max_turns` und das Laufbudget.
+- Im Modus `subprocess` läuft generierter Code auf deinem Rechner. Die Codeprüfung ist eine Positivliste, aber kein
+  vollständiger Schutz. Für den Live-Betrieb Docker verwenden oder `builder.execution = "off"` setzen.

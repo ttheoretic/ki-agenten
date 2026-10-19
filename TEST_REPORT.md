@@ -7,7 +7,7 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 
 | Suite | Befehl | Ergebnis |
 |---|---|---|
-| Backend (pytest) | `python -m pytest` | **125 bestanden**, 0 fehlgeschlagen (≈ 110 s) |
+| Backend (pytest) | `python -m pytest` | **146 bestanden**, 0 fehlgeschlagen (≈ 265 s) |
 | Selbsttest (Live-Gate) | `aicompany selftest` | **bestanden**, Marker für den aktuellen Codestand geschrieben |
 | Frontend-Logik (Vitest) | `cd frontend && npm test` | **14 bestanden** |
 | Typecheck + Build | `npm run build` | erfolgreich (`tsc --noEmit`, Vite-Build) |
@@ -26,6 +26,7 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 | API-Ausfälle | `test_transient_api_errors_are_retried`, `test_api_outage_stops_run_and_keeps_task`, `test_openai_backend_maps_errors` |
 | Ungültige Agentenausgaben | `test_invalid_output_goes_to_revision`, `test_semantically_invalid_output_rejected`, `test_fabricated_metrics_rejected`, `test_invalid_output_rejected_by_schema` |
 | Dauerbetrieb und Nischenwechsel | `test_cycles.py`: weiter → Betriebszyklus mit allen Abteilungen, Kurswechsel nach Fehlschlag, neue Nische mit Ausschlussliste, Sperre bereits versuchter Ideen, `max_cycles`, Unternehmensgedächtnis im Agentenkontext, Messwerte pro Zyklus |
+| Software-Team | `test_software_team.py`: Codeprüfung weist gefährlichen Code ab, Werkbank weist unzulässige Dateien und Abhängigkeiten ab, Tests laufen isoliert ohne Schlüssel in der Umgebung, Endlosschleife wird gestoppt, Ablauf Design → Entwicklung → Test → QA-Code-Review → Korrektur, rote Tests schicken Arbeit zurück, QA bekommt den Code, Release-Paket mit Dockerfile, Live-Werkzeuge und Kostenobergrenze |
 | Teamarbeit | `test_collaboration.py`: blockierende Hilfeanfrage wartet auf den Kollegen, Antworten erreichen den Anfragenden als Teamwissen, Hilfsangebot bei Rückgabe, Limit pro Lauf, abschaltbar, gescheiterte Hilfe blockiert nicht |
 | Überarbeitungslimits / keine Endlosschleifen | `test_revision_limit_fails_and_blocks_dependents`, `test_followup_limit_prevents_loops`, `test_selection_rules_override_ceo`, `test_scheduler_is_bounded` |
 | Berechtigungen | `test_security.py` (Sandbox, Ordnerrechte, Symlinks, Werkzeuge, Default-Deny), `test_ceo_cannot_execute_specialist_task`, `test_build_path_traversal_rejected`, `test_no_dangerous_tools_given` |
@@ -63,6 +64,7 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 - **Externe Ausführer** sind bewusst minimal: Website → lokales Release-Paket, Nachricht → lokaler Postausgang, alles
   Kostenpflichtige → `manual_required`. Echte Anbieter (Hosting-API, SMTP, Zahlungen) sind nicht angebunden.
 - **Kennzahlen** kommen nur aus manueller Eingabe (UI/API); eine Webanalyse- oder Zahlungsanbieter-Anbindung fehlt.
-- **Generierter Code** wird nur statisch geprüft, nicht ausgeführt (Absicht). Funktionstests des MVP macht QA durch Codeprüfung, nicht im Browser.
+- **Generierter Code** wird ausgeführt, aber nur nach Codeprüfung und isoliert. Der Docker-Modus konnte hier nicht getestet werden (kein Docker-Daemon); getestet ist der Subprozess-Modus.
+- **Werkbank im Live-Modus** ist nur mit einer Attrappe des SDK getestet. Wie gut ein echtes Modell eine größere App in 30 Arbeitsschritten fertigstellt, zeigt erst der erste Live-Lauf.
 - **Ein Owner-Token, keine Benutzerrollen.** Für den Betrieb außerhalb von localhost sind ein Reverse-Proxy mit TLS und zusätzliche Authentifizierung nötig.
 - **Dry-Run-Inhalte** sind deterministische Platzhalter. Sie prüfen den Ablauf, nicht die Qualität echter Agentenarbeit.

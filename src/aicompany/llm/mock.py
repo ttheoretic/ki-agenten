@@ -14,7 +14,8 @@ import json
 from typing import Any
 
 from ..agents.schemas import (
-    AnalyticsReview, BuildFile, Consultation, HelpRequest, BuildResult, CEODecision, CEOReview, Channel, Claim, ContentDraft, ContentItem,
+    AnalyticsReview, BuildFile, Component, Consultation, Endpoint, Entity, HelpRequest, ImplementationReport, PlannedFile,
+    TechDesign, BuildResult, CEODecision, CEOReview, Channel, Claim, ContentDraft, ContentItem,
     CriterionScore, Experiment, ExperimentPlan, Feature, FinalDecision, FinanceAssessment, GrowthRecommendation,
     Hypothesis, HypothesisResult, IdeaEvaluation, IdeaFinance, IdeaScore, JourneyStep, KeyMessage, KPI, LandingCopy,
     LeadSource, MetricObservation, MVPSpec, Objection, OpsPlan, Opportunity, OutreachDraft, PageSection, Positioning,
@@ -69,6 +70,136 @@ def _action(action_type: str, title: str, params: dict, cost: float = 0.0, recur
     )
 
 
+def _webapp_files(*, validation: bool, export: bool, vat_bug: bool) -> dict[str, str]:
+    """Kleine, aber vollständige Web-App (FastAPI + SQLite + Tests), wie sie der Builder im Dry-Run erstellt."""
+    vat = "1.9" if vat_bug else "1.19"
+    field = "Field(ge=0)" if validation else "Field()"
+    main = f'''"""Angebotsrechner – Web-App (FastAPI + SQLite)."""
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from pydantic import BaseModel, Field
+
+from . import storage
+
+app = FastAPI(title="Angebotsrechner")
+STATIC = Path(__file__).parent / "static"
+
+
+class QuoteIn(BaseModel):
+    monthly_costs: float = {field}
+    productive_hours: float = Field(gt=0)
+    material: float = {field}
+    hours: float = {field}
+
+
+@app.post("/api/quotes")
+def create_quote(q: QuoteIn) -> dict:
+    rate = round(q.monthly_costs / q.productive_hours, 2)
+    net = round(rate * q.hours + q.material, 2)
+    total = round(net * {vat}, 2)
+    return storage.save(q.model_dump() | {{"rate": rate, "total_gross": total}})
+
+
+@app.get("/api/quotes")
+def list_quotes() -> list[dict]:
+    return storage.all()
+
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> str:
+    return (STATIC / "index.html").read_text(encoding="utf-8")
+'''
+    if export:
+        main += '''
+
+@app.get("/api/quotes.csv", response_class=PlainTextResponse)
+def export_csv() -> str:
+    rows = ["id;stundensatz;brutto"] + [f"{r['id']};{r['rate']};{r['total_gross']}" for r in storage.all()]
+    return "\\n".join(rows)
+'''
+    storage = '''"""SQLite-Speicher (Standardbibliothek). Pfad über die Umgebungsvariable APP_DB."""
+import json
+import os
+import sqlite3
+import threading
+
+_lock = threading.Lock()
+_conn = sqlite3.connect(os.environ.get("APP_DB", "data.sqlite3"), check_same_thread=False)
+_conn.execute("CREATE TABLE IF NOT EXISTS quotes (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)")
+
+
+def save(data: dict) -> dict:
+    with _lock:
+        cur = _conn.execute("INSERT INTO quotes(data) VALUES (?)", (json.dumps(data),))
+        _conn.commit()
+    return {"id": cur.lastrowid, **data}
+
+
+def all() -> list[dict]:
+    rows = _conn.execute("SELECT id, data FROM quotes ORDER BY id").fetchall()
+    return [{"id": r[0], **json.loads(r[1])} for r in rows]
+'''
+    tests = '''from fastapi.testclient import TestClient
+
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_quote_is_calculated_and_saved():
+    r = client.post("/api/quotes", json={"monthly_costs": 6000, "productive_hours": 120, "material": 150, "hours": 8})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rate"] == 50.0
+    assert body["total_gross"] == 654.5
+    assert any(q["id"] == body["id"] for q in client.get("/api/quotes").json())
+
+
+def test_ui_is_served():
+    assert "Angebotsrechner" in client.get("/").text
+'''
+    if validation:
+        tests += '''
+
+def test_negative_values_are_rejected():
+    r = client.post("/api/quotes", json={"monthly_costs": 6000, "productive_hours": 120, "material": 0, "hours": -5})
+    assert r.status_code == 422
+'''
+    if export:
+        tests += '''
+
+def test_csv_export():
+    client.post("/api/quotes", json={"monthly_costs": 3000, "productive_hours": 100, "material": 0, "hours": 1})
+    assert client.get("/api/quotes.csv").text.startswith("id;stundensatz;brutto")
+'''
+    html = ("<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>Angebotsrechner</title></head><body>"
+            "<h1>Angebotsrechner</h1><form id=\"f\"><input name=\"monthly_costs\" type=\"number\" min=\"0\" placeholder=\"Monatliche Kosten\">"
+            "<input name=\"productive_hours\" type=\"number\" min=\"1\" placeholder=\"Produktive Stunden\">"
+            "<input name=\"hours\" type=\"number\" min=\"0\" placeholder=\"Stunden für den Auftrag\">"
+            "<input name=\"material\" type=\"number\" min=\"0\" placeholder=\"Material\"><button>Berechnen</button></form>"
+            "<p id=\"out\"></p><script>document.getElementById('f').onsubmit=async e=>{e.preventDefault();"
+            "const d=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,+v||0]));"
+            "const r=await fetch('/api/quotes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});"
+            "const j=await r.json();document.getElementById('out').textContent=r.ok?'Brutto: '+j.total_gross+' €':'Bitte Eingaben prüfen';};"
+            "</script></body></html>")
+    return {
+        "app/__init__.py": "",
+        "app/main.py": main,
+        "app/storage.py": storage,
+        "app/static/index.html": html,
+        "tests/__init__.py": "",
+        "tests/conftest.py": 'import os\n\nos.environ.setdefault("APP_DB", ":memory:")\n',
+        "tests/test_api.py": tests,
+        "requirements.txt": "fastapi==0.146.0\nuvicorn==0.54.0\n",
+        "Dockerfile": ("FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\n"
+                       "COPY app ./app\nENV APP_DB=/data/app.sqlite3\nEXPOSE 8000\n"
+                       "CMD [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]\n"),
+        "README.md": "# Angebotsrechner\n\nStart: `pip install -r requirements.txt && uvicorn app.main:app`\nTests: `pytest`\n",
+    }
+
+
 def _totals(metrics: list[dict]) -> dict[str, float]:
     out: dict[str, float] = {}
     for m in metrics:
@@ -99,7 +230,7 @@ class MockBackend:
             self.invalid_plan[call.task_key] -= 1
             raise LLMOutputError("Simulierte ungültige Ausgabe: JSON entspricht nicht dem Schema")
         gen = getattr(self, f"_gen_{call.kind}")
-        output = gen(call)
+        output = await asyncio.to_thread(gen, call) if call.workbench is not None else gen(call)
         if call.kind != "consultation" and not call.context.get("team_notes"):
             output.help_requests = self._help_requests(call)
         if self.semantic_invalid_plan.get(call.task_key, 0) > 0:
@@ -244,7 +375,7 @@ class MockBackend:
                                             suggested_fix=SIM + "Prüfung beheben", suggested_test=SIM + "Prüfung erneut ausführen",
                                             target_agent=target.get("agent", "builder")) for c in failed_checks],
                             unsupported_claims=[], compliance_risks=[], approvals_required=[])
-        if target.get("kind") == "build" and target.get("revision_count", 0) == 0 and "product" in str(target.get("key", "")):
+        if target.get("kind") in ("build", "implement") and target.get("revision_count", 0) == 0 and "p2.builder.product" in str(target.get("key", "")):
             # Simuliertes realistisches Ergebnis: erster Build hat einen Mangel → Rückgabe an Builder
             return QAReview(
                 verdict="fail", summary=SIM + "Funktionsprüfung: Eingabevalidierung fehlt",
@@ -349,6 +480,48 @@ class MockBackend:
                            run_instructions="index.html im Browser öffnen", known_limitations=["Keine Speicherung", "Keine PDF-Ausgabe"],
                            feature_coverage=["F1", "F2", "F3"])
 
+    # ---------- Software-Team ----------
+    def _gen_tech_design(self, call: AgentCall) -> TechDesign:
+        return TechDesign(
+            architecture=SIM + "FastAPI-Web-App mit SQLite (Standardbibliothek), HTML-Oberfläche unter /, JSON-API unter /api, Tests mit pytest",
+            components=[Component(name="API", responsibility="Angebote berechnen und speichern"),
+                        Component(name="Speicher", responsibility="SQLite-Zugriff (app/storage.py)"),
+                        Component(name="Oberfläche", responsibility="Formular und Ergebnisliste (app/static/index.html)")],
+            data_model=[Entity(name="Quote", fields=["id", "monthly_costs", "productive_hours", "material", "hours", "rate", "total_gross"])],
+            api_endpoints=[Endpoint(method="POST", path="/api/quotes", purpose="Angebot berechnen und speichern"),
+                           Endpoint(method="GET", path="/api/quotes", purpose="Gespeicherte Angebote auflisten"),
+                           Endpoint(method="GET", path="/", purpose="Oberfläche")],
+            file_plan=[PlannedFile(path=p, purpose=d) for p, d in [
+                ("app/main.py", "FastAPI-App und Endpunkte"), ("app/storage.py", "SQLite-Zugriff"), ("app/static/index.html", "Oberfläche"),
+                ("tests/conftest.py", "Testdatenbank im Speicher"), ("tests/test_api.py", "API-Tests"), ("requirements.txt", "Abhängigkeiten"),
+                ("Dockerfile", "Container für das Hosting"), ("README.md", "Betrieb und Entwicklung")]],
+            test_plan=["Angebot mit gültigen Werten berechnet Stundensatz und Bruttosumme", "Liste enthält gespeichertes Angebot",
+                       "Oberfläche ist erreichbar"],
+            risks=[SIM + "Keine Benutzerkonten im MVP – Daten sind für alle Nutzer der Instanz sichtbar"],
+        )
+
+    def _gen_implement(self, call: AgentCall) -> ImplementationReport:
+        """Simuliert echte Entwicklerarbeit über die Werkbank: Code schreiben, testen, Fehler beheben, erneut testen."""
+        wb = call.workbench
+        fixed_validation = call.revision > 0
+        operate = call.context.get("cycle_type") == "operate"
+        files = _webapp_files(validation=fixed_validation, export=operate, vat_bug=True)
+        for path, content in files.items():
+            wb.write_file(path, content)
+        first = wb.run_tests()
+        if not first.passed:  # wie ein Entwickler: Fehler lesen, beheben, erneut testen
+            wb.write_file("app/main.py", _webapp_files(validation=fixed_validation, export=operate, vat_bug=False)["app/main.py"])
+            second = wb.run_tests()
+        else:
+            second = first
+        return ImplementationReport(
+            summary=SIM + ("Version mit Eingabevalidierung" if fixed_validation else "Erste lauffähige Version")
+                    + (" und CSV-Export" if operate else "") + f"; Tests: {second.summary}",
+            files_changed=sorted(files), tests_passed=second.passed,
+            feature_coverage=["F1", "F2", "F3"], known_issues=[] if fixed_validation else [SIM + "Eingaben werden noch nicht auf negative Werte geprüft"],
+            run_instructions="pip install -r requirements.txt && uvicorn app.main:app --port 8000",
+        )
+
     def _gen_positioning(self, call: AgentCall) -> Positioning:
         sharpened = call.revision > 0
         headline = "Angebote in 2 Minuten statt 30 – mit korrektem Stundensatz" if sharpened else "Der Angebotsrechner fürs Handwerk"
@@ -391,7 +564,7 @@ class MockBackend:
                 recurring_tasks=[RecurringTask(name="Kennzahlen-Review", schedule="wöchentlich", owner_agent="analytics")],
                 runbook=["Neue Version erst nach QA-Freigabe und Eigentümer-Freigabe veröffentlichen"],
                 monitoring=["Budget", "Fehler", "offene Freigaben"], risks=[],
-                external_actions=[_action("publish_website", f"Produktversion aus Zyklus {call.context.get('cycle')} veröffentlichen (lokales Release-Paket)",
+                external_actions=[_action("deploy_app", f"Neue Produktversion aus Zyklus {call.context.get('cycle')} ausrollen",
                                           {"source_dir": "product", "target": "local_release"},
                                           justification=SIM + "QA-geprüfte Verbesserungen ausliefern")],
             )
@@ -406,7 +579,10 @@ class MockBackend:
                                       {"source_dir": "site", "target": "local_release"},
                                       justification=SIM + "Ohne erreichbare Seite kein Markttest",
                                       risks=["Impressum/Datenschutz müssen vorher ausgefüllt sein"],
-                                      alternatives=["Nur Vorschau intern teilen"])],
+                                      alternatives=["Nur Vorschau intern teilen"]),
+                              _action("deploy_app", "Web-App ausrollen (Release-Paket mit Dockerfile)", {"source_dir": "product", "target": "local_release"},
+                                      justification=SIM + "Kunden brauchen eine erreichbare Anwendung",
+                                      risks=["Hosting-Konto muss vom Eigentümer angelegt werden"], alternatives=["Nur Warteliste betreiben"])],
         )
 
     def _gen_experiment_plan(self, call: AgentCall) -> ExperimentPlan:

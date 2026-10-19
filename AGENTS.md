@@ -11,7 +11,7 @@ Eine Aufgabe, deren Art nicht zur Rolle passt, schlägt fehl. Deshalb kann der C
 | 3 | **Vector** | Business Strategy & Opportunity Evaluation | Research & Strategy | `idea_evaluation` | Workspace | `strategy/` |
 | 4 | **Ledger** | CFO / Finance & Unit Economics | Research & Strategy | `finance_assessment` | Workspace | `finance/` |
 | 5 | **Compass** | Product Manager & Customer Research | Product & Engineering | `mvp_spec` | Workspace | `product_spec/` |
-| 6 | **Forge** | Software Engineer / Builder | Product & Engineering | `build` | Workspace, statische Prüfungen | `builder/`, `product/`, `site/` |
+| 6 | **Forge** | Software Engineer / Builder | Product & Engineering | `tech_design`, `implement`, `build` | Werkbank (Dateien, Tests), statische Prüfungen | `builder/`, `product/`, `site/` |
 | 7 | **Echo** | Marketing & Brand Strategy | Marketing & Revenue | `positioning`, `experiment_plan` | Workspace, Freigabeanträge | `marketing/` |
 | 8 | **Bridge** | Sales & Customer Acquisition | Marketing & Revenue | `sales_plan` | Workspace, Freigabeanträge | `sales/` |
 | 9 | **Pulse** | Operations & Automation | Operations | `ops_plan` | Workspace, Freigabeanträge | `operations/` |
@@ -27,7 +27,8 @@ Eine Aufgabe, deren Art nicht zur Rolle passt, schlägt fehl. Deshalb kann der C
 | Wirtschaftlichkeit | Finance | Programm (Break-even), QA |
 | Idee auswählen | **CEO** | Programm (Auswahlregeln) |
 | MVP definieren | Product | CEO-Review |
-| MVP bauen | Builder | Programm (Pfade, statische Prüfungen), QA-Test |
+| Technisches Design | Builder | Programm (Dateiplan, Testplan) |
+| Software entwickeln | Builder | Programm (Codeprüfung, Tests wie eine CI), QA-Code-Review |
 | Positionierung | Marketing | Programm (Werbeaussagen), CEO-Review |
 | Preis | Finance | Programm |
 | Landingpage | Builder | QA-Compliance |
@@ -49,6 +50,25 @@ Eine Aufgabe, deren Art nicht zur Rolle passt, schlägt fehl. Deshalb kann der C
 | Betrieb und Release | Operations | Eigentümer (Freigabe der Veröffentlichung) |
 | Monatsabschluss | Finance | Programm |
 | Zyklusentscheidung | CEO | Programm plant den nächsten Zyklus |
+
+## Software-Team (Builder)
+
+Der Builder arbeitet wie ein Entwicklungsteam mit fester, gut hostbarer Projektstruktur:
+`app/main.py` (FastAPI), `app/*.py`, `app/static/*`, SQLite, `tests/test_*.py`, `requirements.txt`, `README.md` und
+`Dockerfile`.
+
+1. **Technisches Design** (`tech_design`): Architektur, Datenmodell, API-Endpunkte, Dateiplan, Testplan.
+2. **Entwickeln** (`implement`): Der Builder nutzt die Werkzeuge `list_files`, `read_file`, `write_file`,
+   `delete_file` und `run_tests`, bis alle Tests grün sind. Im Live-Modus sind das echte SDK-Function-Tools mit bis zu
+   `builder.max_turns` Arbeitsschritten.
+3. **CI durch das Programm:** Pflichtdateien, Codeprüfung und ein eigener, autoritativer Testlauf. Rote Tests schicken die
+   Arbeit mit der Testausgabe zurück.
+4. **Code-Review durch QA:** QA bekommt den Code und das Testergebnis. Befunde gehen mit Korrektur- und Testvorschlag
+   zurück, und ein Kollege bietet Hilfe an.
+5. **Release:** Operations beantragt `deploy_app`. Nach deiner Freigabe entsteht ein Release-Paket mit Dockerfile. Das
+   automatische Ausrollen zu einem Hoster ist der nächste Ausbauschritt.
+
+Im laufenden Betrieb entwickelt der Builder die bestehende Software weiter: Code lesen, ändern, Tests ergänzen.
 
 ## Teamarbeit zwischen den Agenten
 

@@ -36,6 +36,10 @@ class AgentCall:
     context: dict[str, Any] = field(default_factory=dict)  # strukturierte Eingaben (für Simulation)
     revision: int = 0
     feedback: list[dict[str, Any]] = field(default_factory=list)
+    workbench: Any = None  # Werkbank für mehrstufige Softwareentwicklung (Dateien + Tests)
+    max_turns: int | None = None
+    cost_cap_eur: float | None = None  # harte Obergrenze für diesen Auftrag (wird während der Arbeit geprüft)
+    cost_fn: Any = None  # (model, input_tokens, output_tokens) -> EUR
 
 
 @dataclass
