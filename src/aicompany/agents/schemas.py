@@ -23,6 +23,29 @@ Criterion = Literal[
 ]
 
 
+AgentId = Literal["ceo", "research", "strategy", "finance", "product", "builder", "marketing", "sales", "operations", "qa", "analytics"]
+
+
+class HelpRequest(BaseModel):
+    to_agent: AgentId = Field(description="Kollege, der helfen soll (nicht man selbst)")
+    question: str = Field(description="Konkrete Frage oder benötigte Zuarbeit")
+    reason: str
+    blocking: bool = Field(description="true = Ergebnis erst nach der Antwort fertigstellen")
+
+
+class TeamOutput(BaseModel):
+    """Basis aller Agentenausgaben: Jeder Agent kann Kollegen um Hilfe bitten."""
+
+    help_requests: list[HelpRequest] = Field(default_factory=list, description="Hilfeanfragen an Kollegen (max. 2, sonst leer)")
+
+
+class Consultation(TeamOutput):
+    answer: str = Field(description="Konkrete Antwort bzw. Zuarbeit für den Kollegen")
+    recommendations: list[str]
+    offers: list[str] = Field(description="Weitere Unterstützung, die man anbietet")
+    confidence: Confidence
+
+
 class Source(BaseModel):
     id: str
     title: str
@@ -51,7 +74,7 @@ class Opportunity(BaseModel):
     risks: list[str]
 
 
-class ResearchReport(BaseModel):
+class ResearchReport(TeamOutput):
     summary: str
     research_date: str
     opportunities: list[Opportunity]
@@ -88,7 +111,7 @@ class Recommendation(BaseModel):
     reason: str
 
 
-class IdeaEvaluation(BaseModel):
+class IdeaEvaluation(TeamOutput):
     ideas: list[IdeaScore]
     recommendation: Recommendation
     rejected: list[Rejection]
@@ -114,7 +137,7 @@ class IdeaFinance(BaseModel):
     budget_risks: list[str]
 
 
-class FinanceAssessment(BaseModel):
+class FinanceAssessment(TeamOutput):
     ideas: list[IdeaFinance]
     recommendation: str
     unattractive_measures: list[str]
@@ -130,7 +153,7 @@ class QAIssue(BaseModel):
     target_agent: str
 
 
-class QAReview(BaseModel):
+class QAReview(TeamOutput):
     verdict: Literal["pass", "pass_with_issues", "fail"]
     summary: str
     issues: list[QAIssue]
@@ -157,7 +180,7 @@ class FollowUpRequest(BaseModel):
     reason: str
 
 
-class CEOReview(BaseModel):
+class CEOReview(TeamOutput):
     summary: str
     reviews: list[TaskReview]
     priorities: list[TaskPriority]
@@ -166,7 +189,7 @@ class CEOReview(BaseModel):
     next_step: str
 
 
-class CEODecision(BaseModel):
+class CEODecision(TeamOutput):
     decision: Literal["select", "need_more_info"]
     selected_idea_id: str | None
     rationale: str
@@ -189,7 +212,7 @@ class UserFlow(BaseModel):
     steps: list[str]
 
 
-class MVPSpec(BaseModel):
+class MVPSpec(TeamOutput):
     product_name: str
     problem: str
     target_users: str
@@ -207,7 +230,7 @@ class BuildFile(BaseModel):
     content: str
 
 
-class BuildResult(BaseModel):
+class BuildResult(TeamOutput):
     summary: str
     files: list[BuildFile]
     run_instructions: str
@@ -267,7 +290,7 @@ class Hypothesis(BaseModel):
     success_threshold: str
 
 
-class Positioning(BaseModel):
+class Positioning(TeamOutput):
     brand_name: str
     tagline: str
     positioning_statement: str
@@ -309,7 +332,7 @@ class KPI(BaseModel):
     target: str
 
 
-class SalesPlan(BaseModel):
+class SalesPlan(TeamOutput):
     channels: list[Channel]
     customer_journey: list[JourneyStep]
     lead_sources: list[LeadSource]
@@ -326,7 +349,7 @@ class RecurringTask(BaseModel):
     owner_agent: str
 
 
-class OpsPlan(BaseModel):
+class OpsPlan(TeamOutput):
     recurring_tasks: list[RecurringTask]
     runbook: list[str]
     monitoring: list[str]
@@ -351,7 +374,7 @@ class ContentDraft(BaseModel):
     body: str
 
 
-class ExperimentPlan(BaseModel):
+class ExperimentPlan(TeamOutput):
     experiments: list[Experiment]
     content_drafts: list[ContentDraft]
     external_actions: list[ProposedAction]
@@ -375,7 +398,7 @@ class GrowthRecommendation(BaseModel):
     target_agent: str
 
 
-class AnalyticsReview(BaseModel):
+class AnalyticsReview(TeamOutput):
     data_available: bool
     metrics_used: list[MetricObservation]
     hypothesis_results: list[HypothesisResult]
@@ -385,7 +408,7 @@ class AnalyticsReview(BaseModel):
     statistical_notes: str
 
 
-class FinalDecision(BaseModel):
+class FinalDecision(TeamOutput):
     decision: Literal["continue", "pivot", "stop"]
     rationale: str
     lessons: list[str]
@@ -407,4 +430,5 @@ OUTPUT_SCHEMAS: dict[str, type[BaseModel]] = {
     "experiment_plan": ExperimentPlan,
     "analytics_review": AnalyticsReview,
     "final_decision": FinalDecision,
+    "consultation": Consultation,
 }

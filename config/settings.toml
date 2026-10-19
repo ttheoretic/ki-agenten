@@ -89,6 +89,12 @@ retry_backoff_seconds = 2.0
 run_stale_after_seconds = 900    # Lauf ohne Heartbeat gilt danach als abgestürzt
 call_timeout_seconds = 180
 
+[collaboration]
+enabled = true
+max_consultations_per_run = 4   # Hilfeanfragen/-angebote zählen als Agentenaufrufe (Budget!)
+max_blocking_help_per_task = 1  # wie oft eine Aufgabe auf Kollegenhilfe warten darf
+offer_help_on_revision = true   # bei Rückgabe zur Überarbeitung bietet ein passender Kollege Hilfe an
+
 [experiment]
 days = 30
 # "calendar": Tag = Kalendertage seit Start. "accelerated": jeder Lauf rückt days_per_run Tage vor (für Dry-Run/Demo)

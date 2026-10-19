@@ -14,7 +14,7 @@ import json
 from typing import Any
 
 from ..agents.schemas import (
-    AnalyticsReview, BuildFile, BuildResult, CEODecision, CEOReview, Channel, Claim, ContentDraft, ContentItem,
+    AnalyticsReview, BuildFile, Consultation, HelpRequest, BuildResult, CEODecision, CEOReview, Channel, Claim, ContentDraft, ContentItem,
     CriterionScore, Experiment, ExperimentPlan, Feature, FinalDecision, FinanceAssessment, GrowthRecommendation,
     Hypothesis, HypothesisResult, IdeaEvaluation, IdeaFinance, IdeaScore, JourneyStep, KeyMessage, KPI, LandingCopy,
     LeadSource, MetricObservation, MVPSpec, Objection, OpsPlan, Opportunity, OutreachDraft, PageSection, Positioning,
@@ -100,6 +100,8 @@ class MockBackend:
             raise LLMOutputError("Simulierte ungültige Ausgabe: JSON entspricht nicht dem Schema")
         gen = getattr(self, f"_gen_{call.kind}")
         output = gen(call)
+        if call.kind != "consultation" and not call.context.get("team_notes"):
+            output.help_requests = self._help_requests(call)
         if self.semantic_invalid_plan.get(call.task_key, 0) > 0:
             self.semantic_invalid_plan[call.task_key] -= 1
             output = self._break(output)
@@ -121,6 +123,44 @@ class MockBackend:
         elif isinstance(output, BuildResult):
             output.files.append(BuildFile(path="../escape.sh", purpose="unzulässig", content="rm -rf /"))
         return output
+
+    # ---------- Teamarbeit (simuliert, deterministisch) ----------
+    @staticmethod
+    def _help_requests(call: AgentCall) -> list[HelpRequest]:
+        """Typische Rückfragen unter Kollegen – nur beim ersten Versuch, solange noch keine Antwort vorliegt."""
+        if call.revision:
+            return []
+        if call.kind == "positioning":
+            return [HelpRequest(to_agent="finance", question="Welcher Preisrahmen ist realistisch, damit ich ihn auf der Landingpage nennen kann?",
+                                reason=SIM + "Preisaussage auf der Landingpage muss wirtschaftlich tragfähig sein", blocking=True)]
+        if call.kind == "mvp_spec" and call.context.get("cycle_type") != "operate":
+            return [HelpRequest(to_agent="marketing", question="Welche Funktion überzeugt die Zielgruppe am meisten?",
+                                reason=SIM + "Must-Features nach Kundennutzen priorisieren", blocking=False)]
+        if call.kind == "sales_plan":
+            return [HelpRequest(to_agent="qa", question="Ist die geplante Kontaktaufnahme rechtlich sauber (DSGVO/UWG)?",
+                                reason=SIM + "Keine Kaltakquise ohne Rechtsgrundlage", blocking=True)]
+        if call.kind == "analytics_review" and call.context.get("cycle_type") == "operate":
+            return [HelpRequest(to_agent="sales", question="Welche Rückmeldungen und Einwände kamen von Interessenten?",
+                                reason=SIM + "Zahlen mit qualitativem Feedback ergänzen", blocking=False)]
+        return []
+
+    def _gen_consultation(self, call: AgentCall) -> Consultation:
+        inp = call.context.get("task_inputs", {})
+        who = inp.get("requester", "Kollege")
+        if inp.get("mode") == "offer":
+            return Consultation(answer=SIM + f"Ich habe mir die Rückmeldung angesehen und schlage vor, zuerst den kritischsten Punkt zu beheben "
+                                f"und ihn mit einem kleinen Test abzusichern. Aus meiner Sicht als {call.agent_id} ist das umsetzbar.",
+                                recommendations=["Kritischsten Befund zuerst beheben", "Akzeptanzkriterium als Test formulieren"],
+                                offers=[f"Ich prüfe die überarbeitete Version für {who} gern vorab"], confidence="medium")
+        answers = {
+            "finance": "Ein Einmalpreis von 19–29 € deckt Gebühren und Hosting bereits ab 3 Verkäufen im Monat.",
+            "marketing": "Der Stundensatzrechner ist der stärkste Aufhänger – er löst das Problem sofort sichtbar.",
+            "qa": "Kontakt nur nach eigener Anfrage oder mit dokumentierter Einwilligung; keine gekauften Listen, Impressum verlinken.",
+            "sales": "Bisher gab es eine Anfrage; der häufigste Einwand ist der Wechselaufwand weg von Excel.",
+        }
+        return Consultation(answer=SIM + answers.get(call.agent_id, "Hier ist meine Einschätzung aus meiner Fachrolle."),
+                            recommendations=[SIM + "Empfehlung in das Ergebnis übernehmen"],
+                            offers=[f"Bei Rückfragen helfe ich {who} gern weiter"], confidence="medium")
 
     # ---------- Generatoren je Aufgabenart ----------
     def _gen_market_research(self, call: AgentCall) -> ResearchReport:

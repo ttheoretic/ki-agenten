@@ -265,6 +265,10 @@ class TaskStore:
             if t.status != S.PENDING:
                 continue
             bad = [d for d in t.depends_on if d in by_key and by_key[d].status in (S.FAILED, S.BLOCKED)]
+            optional = [d for d in bad if d.startswith("help.")]
+            if optional:  # gescheiterte Kollegenhilfe blockiert nicht – dann eben ohne Hilfe weiterarbeiten
+                self.set_fields(t.id, depends_on=[d for d in t.depends_on if d not in optional])
+                bad = [d for d in bad if d not in optional]
             if bad:
                 t2 = self.transition(t.id, S.BLOCKED, note=f"blockiert durch {', '.join(bad)}", expected={S.PENDING},
                                      updates={"error": f"Abhängigkeit fehlgeschlagen: {', '.join(bad)}"})

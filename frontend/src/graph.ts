@@ -19,7 +19,7 @@ export const ZONES: { id: string; x: number; y: number; w: number; h: number; la
   { id: "management", x: 410, y: 262, w: 180, h: 118 },
 ];
 
-export const COMM_TYPES = ["comm.assignment", "comm.handoff", "comm.feedback", "comm.message"];
+export const COMM_TYPES = ["comm.assignment", "comm.handoff", "comm.feedback", "comm.message", "comm.help_request", "comm.help_answer", "comm.help_offer"];
 
 export interface Edge {
   key: string; a: string; b: string; count: number; lastTs: string; lastType: string; lastEvent: EventItem;

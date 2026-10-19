@@ -36,6 +36,9 @@ COMMON_RULES = [
     "Du kannst keine externen Aktionen ausführen. Externe Aktionen darfst du nur als Antrag vorschlagen; ein Mensch entscheidet.",
     "Gib niemals Zugangsdaten, API-Schlüssel oder Geheimnisse aus.",
     "Halte Ergebnisse knapp, konkret und überprüfbar; dokumentiere Unsicherheiten.",
+    "Du arbeitest im Team: Fehlt dir Fachwissen eines Kollegen, stelle eine gezielte Hilfeanfrage (help_requests, max. 2). "
+    "Markiere sie als blocking, wenn dein Ergebnis ohne die Antwort nicht verlässlich ist. Antworten von Kollegen findest du unter team_notes.",
+    "Wirst du um Hilfe gebeten, antworte konkret und aus deiner Fachrolle heraus und biete sinnvolle weitere Unterstützung an.",
 ]
 
 GROUPS = {
@@ -63,7 +66,7 @@ ROLES: dict[str, AgentRole] = {
                 "Wähle keine Idee allein wegen einer hohen Punktzahl, wenn wichtige Informationen fehlen oder erhebliche Risiken bestehen.",
                 "Begründe jede Entscheidung mit den verwendeten Kriterien.",
             ],
-            task_kinds=["ceo_review", "ceo_decision", "final_decision"],
+            task_kinds=["ceo_review", "ceo_decision", "final_decision", "consultation"],
         ),
         AgentRole(
             id="research", name="Scout", title="Research & Market Intelligence", group="research_strategy",
@@ -77,7 +80,7 @@ ROLES: dict[str, AgentRole] = {
                 "Eine Aussage vom Typ 'fact' braucht mindestens eine Quelle aus deiner Quellenliste.",
                 "Verwende nur URLs, die du tatsächlich über die Websuche gefunden hast.",
             ],
-            task_kinds=["market_research"],
+            task_kinds=["market_research", "consultation"],
         ),
         AgentRole(
             id="strategy", name="Vector", title="Business Strategy & Opportunity Evaluation", group="research_strategy",
@@ -88,7 +91,7 @@ ROLES: dict[str, AgentRole] = {
                 "Auswahl- und Abbruchkriterien festlegen und eine begründete Empfehlung geben",
             ],
             rules=["Berechne keine Gesamtpunktzahl – das übernimmt das Programm transparent aus deinen Einzelbewertungen."],
-            task_kinds=["idea_evaluation"],
+            task_kinds=["idea_evaluation", "consultation"],
         ),
         AgentRole(
             id="finance", name="Ledger", title="CFO / Finance & Unit Economics", group="research_strategy",
@@ -101,7 +104,7 @@ ROLES: dict[str, AgentRole] = {
                 "Du führst keine Zahlungen aus, eröffnest keine Konten und autorisierst keine Transaktionen.",
                 "Break-even und Margen berechnet das Programm aus deinen Annahmen.",
             ],
-            task_kinds=["finance_assessment"],
+            task_kinds=["finance_assessment", "consultation"],
         ),
         AgentRole(
             id="product", name="Compass", title="Product Manager & Customer Research", group="product_engineering",
@@ -111,7 +114,7 @@ ROLES: dict[str, AgentRole] = {
                 "Nutzerabläufe beschreiben und einen Validierungsplan mit minimalem Aufwand entwerfen",
             ],
             rules=["Begrenze die erste Version auf das Nötigste, bevor Nachfrage nachgewiesen ist."],
-            task_kinds=["mvp_spec"],
+            task_kinds=["mvp_spec", "consultation"],
         ),
         AgentRole(
             id="builder", name="Forge", title="Software Engineer / Builder", group="product_engineering",
@@ -125,7 +128,7 @@ ROLES: dict[str, AgentRole] = {
                 "Binde keine externen Skripte, Tracker oder Fonts ein und sammle keine personenbezogenen Daten.",
                 "Keine erfundenen Testimonials oder Erfolgsversprechen in Produkttexten.",
             ],
-            task_kinds=["build"],
+            task_kinds=["build", "consultation"],
         ),
         AgentRole(
             id="marketing", name="Echo", title="Marketing & Brand Strategy", group="marketing_revenue",
@@ -135,7 +138,7 @@ ROLES: dict[str, AgentRole] = {
                 "Kanäle bewerten und Hypothesen mit messbaren Schwellen formulieren",
             ],
             rules=["Keine irreführenden Behauptungen, keine erfundenen Testimonials, keine unbelegten Erfolgsversprechen."],
-            task_kinds=["positioning", "experiment_plan"],
+            task_kinds=["positioning", "experiment_plan", "consultation"],
         ),
         AgentRole(
             id="sales", name="Bridge", title="Sales & Customer Acquisition", group="marketing_revenue",
@@ -148,7 +151,7 @@ ROLES: dict[str, AgentRole] = {
                 "Keine Massen- oder Spam-Nachrichten; Kontakt nur mit Rechtsgrundlage (z. B. Einwilligung).",
                 "Outreach ist immer nur ein Entwurf bzw. ein Freigabeantrag.",
             ],
-            task_kinds=["sales_plan"],
+            task_kinds=["sales_plan", "consultation"],
         ),
         AgentRole(
             id="operations", name="Pulse", title="Operations & Automation", group="operations",
@@ -158,7 +161,7 @@ ROLES: dict[str, AgentRole] = {
                 "Launch vorbereiten und notwendige Freigabeanträge bündeln",
             ],
             rules=["Plane keine endlosen Prozesse; jeder Zeitplan braucht ein Limit."],
-            task_kinds=["ops_plan"],
+            task_kinds=["ops_plan", "consultation"],
         ),
         AgentRole(
             id="qa", name="Sentinel", title="QA, Risk & Compliance", group="product_engineering",
@@ -168,7 +171,7 @@ ROLES: dict[str, AgentRole] = {
                 "Zu jedem Problem eine konkrete Korrektur und einen Test vorschlagen",
             ],
             rules=["Deine Bewertung ersetzt nicht die technischen Berechtigungsprüfungen des Programms."],
-            task_kinds=["qa_review"],
+            task_kinds=["qa_review", "consultation"],
         ),
         AgentRole(
             id="analytics", name="Lens", title="Analytics & Growth Optimization", group="marketing_revenue",
@@ -182,7 +185,7 @@ ROLES: dict[str, AgentRole] = {
                 "Liegen keine Daten vor, setze data_available=false und Hypothesenstatus 'no_data'.",
                 "Interpretiere Korrelationen nicht als Ursache.",
             ],
-            task_kinds=["analytics_review"],
+            task_kinds=["analytics_review", "consultation"],
         ),
     ]
 }

@@ -67,6 +67,13 @@ class OrchestratorConfig(BaseModel):
     call_timeout_seconds: int = 180
 
 
+class CollaborationConfig(BaseModel):
+    enabled: bool = True
+    max_consultations_per_run: int = Field(4, ge=0)
+    max_blocking_help_per_task: int = Field(1, ge=0)
+    offer_help_on_revision: bool = True
+
+
 class ExperimentConfig(BaseModel):
     days: int = 30
     clock: Literal["calendar", "accelerated"] = "calendar"
@@ -105,6 +112,7 @@ class Settings(BaseModel):
     web_search: WebSearchConfig = WebSearchConfig()
     orchestrator: OrchestratorConfig = OrchestratorConfig()
     experiment: ExperimentConfig = ExperimentConfig()
+    collaboration: CollaborationConfig = CollaborationConfig()
     approvals: ApprovalsConfig = ApprovalsConfig()
     scheduler: SchedulerConfig = SchedulerConfig()
     server: ServerConfig = ServerConfig()

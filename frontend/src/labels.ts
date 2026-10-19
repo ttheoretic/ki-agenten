@@ -1,46 +1,52 @@
 import type { AgentStatus, TaskStatus } from "./types";
 
+// Statusfarben: neutral bis auf semantische Zustände (aktiv = Akzent, Warten = Bernstein, Fehler = Rot, fertig = Grün)
+const C = { accent: "var(--accent)", muted: "var(--muted)", warn: "var(--warn)", err: "var(--err)", ok: "var(--ok)", text: "var(--text-2)" };
+
 export const STATUS: Record<AgentStatus, { label: string; color: string; icon: string; active?: boolean }> = {
-  ready: { label: "Bereit", color: "#94a3b8", icon: "●" },
-  working: { label: "Arbeitet", color: "#3b82f6", icon: "⚙", active: true },
-  researching: { label: "Recherchiert", color: "#06b6d4", icon: "⌕", active: true },
-  communicating: { label: "Kommuniziert", color: "#a78bfa", icon: "⇄" },
-  waiting_result: { label: "Wartet auf Ergebnis", color: "#64748b", icon: "◷" },
-  waiting_approval: { label: "Wartet auf Freigabe", color: "#f59e0b", icon: "⚑" },
-  reviewing: { label: "Prüft Ergebnis", color: "#818cf8", icon: "✓", active: true },
-  blocked: { label: "Blockiert", color: "#fb923c", icon: "⛔" },
-  error: { label: "Fehler aufgetreten", color: "#ef4444", icon: "!" },
-  done: { label: "Abgeschlossen", color: "#22c55e", icon: "✔" },
-  idle: { label: "Keine Aufgaben", color: "#475569", icon: "○" },
-  paused: { label: "Pausiert", color: "#9ca3af", icon: "❚❚" },
+  ready: { label: "Bereit", color: C.text, icon: "" },
+  working: { label: "Arbeitet", color: C.accent, icon: "", active: true },
+  researching: { label: "Recherchiert", color: C.accent, icon: "", active: true },
+  communicating: { label: "Im Austausch", color: C.accent, icon: "" },
+  waiting_result: { label: "Wartet auf Zuarbeit", color: C.muted, icon: "" },
+  waiting_approval: { label: "Wartet auf Freigabe", color: C.warn, icon: "" },
+  reviewing: { label: "Prüft Ergebnis", color: C.accent, icon: "", active: true },
+  blocked: { label: "Blockiert", color: C.warn, icon: "" },
+  error: { label: "Fehler", color: C.err, icon: "" },
+  done: { label: "Erledigt", color: C.ok, icon: "" },
+  idle: { label: "Keine Aufgaben", color: C.muted, icon: "" },
+  paused: { label: "Pausiert", color: C.muted, icon: "" },
 };
 
 export const TASK_STATUS: Record<TaskStatus, { label: string; color: string }> = {
-  pending: { label: "Wartend", color: "#94a3b8" },
-  in_progress: { label: "In Arbeit", color: "#3b82f6" },
-  review: { label: "In Prüfung", color: "#818cf8" },
-  blocked: { label: "Blockiert", color: "#fb923c" },
-  completed: { label: "Abgeschlossen", color: "#22c55e" },
-  failed: { label: "Fehlgeschlagen", color: "#ef4444" },
+  pending: { label: "Wartend", color: C.muted },
+  in_progress: { label: "In Arbeit", color: C.accent },
+  review: { label: "In Prüfung", color: C.accent },
+  blocked: { label: "Blockiert", color: C.warn },
+  completed: { label: "Erledigt", color: C.ok },
+  failed: { label: "Fehlgeschlagen", color: C.err },
 };
 
-export const COMM_KIND: Record<string, { label: string; color: string }> = {
-  "comm.assignment": { label: "Aufgabenzuweisung", color: "#60a5fa" },
-  "comm.handoff": { label: "Ergebnisübergabe", color: "#2dd4bf" },
-  "comm.feedback": { label: "Rückgabe / Feedback", color: "#fbbf24" },
-  "comm.message": { label: "Nachricht", color: "#c084fc" },
+export const COMM_KIND: Record<string, { label: string; color: string; dashed?: boolean }> = {
+  "comm.assignment": { label: "Auftrag", color: C.text },
+  "comm.handoff": { label: "Übergabe", color: C.accent },
+  "comm.feedback": { label: "Rückgabe", color: C.warn },
+  "comm.message": { label: "Nachricht", color: C.muted, dashed: true },
+  "comm.help_request": { label: "Bittet um Hilfe", color: "var(--team)" },
+  "comm.help_answer": { label: "Hilft", color: "var(--team)" },
+  "comm.help_offer": { label: "Bietet Hilfe an", color: "var(--team)", dashed: true },
 };
 
 export const COMPANY_STATUS: Record<string, { label: string; color: string }> = {
-  running: { label: "Lauf aktiv", color: "#3b82f6" },
-  idle: { label: "Bereit – kein Lauf aktiv", color: "#94a3b8" },
-  paused: { label: "Pausiert", color: "#f59e0b" },
-  draining: { label: "Neue Aufgaben gestoppt", color: "#fb923c" },
-  stopped: { label: "Gestoppt", color: "#ef4444" },
-  budget_exhausted: { label: "Budget ausgeschöpft", color: "#ef4444" },
-  finished: { label: "Experiment abgeschlossen", color: "#22c55e" },
-  attention: { label: "Aufmerksamkeit nötig", color: "#fb923c" },
-  not_started: { label: "Wartet auf ersten Lauf", color: "#94a3b8" },
+  running: { label: "Arbeitet", color: C.accent },
+  idle: { label: "Bereit", color: C.ok },
+  paused: { label: "Pausiert", color: C.warn },
+  draining: { label: "Neue Aufgaben gestoppt", color: C.warn },
+  stopped: { label: "Gestoppt", color: C.err },
+  budget_exhausted: { label: "Budget ausgeschöpft", color: C.err },
+  finished: { label: "Angehalten (Zyklengrenze)", color: C.muted },
+  attention: { label: "Braucht Aufmerksamkeit", color: C.warn },
+  not_started: { label: "Wartet auf ersten Lauf", color: C.muted },
 };
 
 export const APPROVAL_STATUS: Record<string, string> = {
@@ -49,11 +55,11 @@ export const APPROVAL_STATUS: Record<string, string> = {
 };
 
 export const EXECUTION_STATUS: Record<string, { label: string; color: string }> = {
-  not_started: { label: "Noch nicht ausgeführt", color: "#94a3b8" },
-  running: { label: "Ausführung läuft", color: "#3b82f6" },
-  succeeded: { label: "Erfolgreich ausgeführt", color: "#22c55e" },
-  failed: { label: "Ausführung fehlgeschlagen", color: "#ef4444" },
-  manual_required: { label: "Manuelle Ausführung erforderlich", color: "#f59e0b" },
+  not_started: { label: "Noch nicht ausgeführt", color: C.muted },
+  running: { label: "Ausführung läuft", color: C.accent },
+  succeeded: { label: "Erfolgreich ausgeführt", color: C.ok },
+  failed: { label: "Ausführung fehlgeschlagen", color: C.err },
+  manual_required: { label: "Manuelle Ausführung erforderlich", color: C.warn },
 };
 
 export const ACTION_TYPES: Record<string, string> = {
@@ -64,9 +70,10 @@ export const ACTION_TYPES: Record<string, string> = {
 
 export const EVENT_CATEGORIES: { id: string; label: string; types: string[] }[] = [
   { id: "tasks", label: "Aufgaben", types: ["task."] },
-  { id: "comm", label: "Kommunikation", types: ["comm."] },
+  { id: "team", label: "Teamarbeit", types: ["comm.help_", "task.waiting_help", "collab."] },
+  { id: "comm", label: "Aufträge & Übergaben", types: ["comm."] },
   { id: "work", label: "Arbeit & Dateien", types: ["agent.", "file.", "code.", "analysis.", "report."] },
-  { id: "decisions", label: "Entscheidungen & Meilensteine", types: ["ceo.", "milestone.", "phase.", "goal."] },
+  { id: "decisions", label: "Entscheidungen & Meilensteine", types: ["ceo.", "milestone.", "phase.", "goal.", "cycle."] },
   { id: "approvals", label: "Freigaben", types: ["approval."] },
   { id: "budget", label: "Budget", types: ["budget."] },
   { id: "system", label: "System, Fehler & Sicherheit", types: ["run.", "api.", "control.", "security.", "qa.", "metric."] },

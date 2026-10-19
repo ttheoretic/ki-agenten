@@ -44,7 +44,7 @@ test("Unternehmenszentrale zeigt echten Backend-Zustand, Kommunikation, Freigabe
 
   // Verbindung anklicken → Details der tatsächlichen Kommunikation
   await page.locator("[data-testid=edge-ceo-research] .edge-hit").dispatchEvent("click");
-  await expect(page.getByTestId("edge-panel")).toContainText("Aufgabenzuweisung");
+  await expect(page.getByTestId("edge-panel")).toContainText("Auftrag");
   await expect(page.getByTestId("edge-panel")).toContainText("Absender");
   await page.keyboard.press("Escape");
 
@@ -76,6 +76,10 @@ test("Unternehmenszentrale zeigt echten Backend-Zustand, Kommunikation, Freigabe
   await expect(page.getByTestId("btn-run")).toBeDisabled();
   await page.getByTestId("btn-resume").click();
   await expect(page.getByTestId("company-status")).not.toContainText("Pausiert");
+
+  // Teamarbeit: Agenten haben sich gegenseitig geholfen (echte Ereignisse aus dem Lauf)
+  await page.getByTestId("tab-team").click();
+  await expect(page.getByTestId("teamwork")).toContainText("Ledger");
 
   // Kennzahlen: ohne Messung keine Daten
   await page.getByTestId("tab-metrics").click();

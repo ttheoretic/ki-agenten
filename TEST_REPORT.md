@@ -7,7 +7,7 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 
 | Suite | Befehl | Ergebnis |
 |---|---|---|
-| Backend (pytest) | `python -m pytest` | **117 bestanden**, 0 fehlgeschlagen (≈ 85 s) |
+| Backend (pytest) | `python -m pytest` | **125 bestanden**, 0 fehlgeschlagen (≈ 110 s) |
 | Selbsttest (Live-Gate) | `aicompany selftest` | **bestanden**, Marker für den aktuellen Codestand geschrieben |
 | Frontend-Logik (Vitest) | `cd frontend && npm test` | **14 bestanden** |
 | Typecheck + Build | `npm run build` | erfolgreich (`tsc --noEmit`, Vite-Build) |
@@ -26,6 +26,7 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 | API-Ausfälle | `test_transient_api_errors_are_retried`, `test_api_outage_stops_run_and_keeps_task`, `test_openai_backend_maps_errors` |
 | Ungültige Agentenausgaben | `test_invalid_output_goes_to_revision`, `test_semantically_invalid_output_rejected`, `test_fabricated_metrics_rejected`, `test_invalid_output_rejected_by_schema` |
 | Dauerbetrieb und Nischenwechsel | `test_cycles.py`: weiter → Betriebszyklus mit allen Abteilungen, Kurswechsel nach Fehlschlag, neue Nische mit Ausschlussliste, Sperre bereits versuchter Ideen, `max_cycles`, Unternehmensgedächtnis im Agentenkontext, Messwerte pro Zyklus |
+| Teamarbeit | `test_collaboration.py`: blockierende Hilfeanfrage wartet auf den Kollegen, Antworten erreichen den Anfragenden als Teamwissen, Hilfsangebot bei Rückgabe, Limit pro Lauf, abschaltbar, gescheiterte Hilfe blockiert nicht |
 | Überarbeitungslimits / keine Endlosschleifen | `test_revision_limit_fails_and_blocks_dependents`, `test_followup_limit_prevents_loops`, `test_selection_rules_override_ceo`, `test_scheduler_is_bounded` |
 | Berechtigungen | `test_security.py` (Sandbox, Ordnerrechte, Symlinks, Werkzeuge, Default-Deny), `test_ceo_cannot_execute_specialist_task`, `test_build_path_traversal_rejected`, `test_no_dangerous_tools_given` |
 | Freigaben für externe Aktionen | `test_approvals.py` (15 Tests: verbotene/unbekannte Aktionen, Massenkommunikation, Hash-Bindung, Manipulation, Ablauf, Budget, manuelle Bestätigung, Pausensperre), `test_approval_flow_via_api`, E2E-Genehmigung |

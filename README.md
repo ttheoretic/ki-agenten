@@ -10,6 +10,10 @@ Das Unternehmen **läuft dauerhaft in Zyklen**:
 3. Am Ende jedes Zyklus entscheidet der CEO anhand echter Zahlen: **weiter**, **Kurswechsel** zur nächstbesten Idee
    oder **neue Nische** mit frischer Recherche. Gescheiterte Ideen werden gesperrt, Lehren gehen in den nächsten Zyklus ein.
 
+Die Agenten arbeiten als Team: Sie bitten Kollegen um Hilfe, warten bei Bedarf auf deren Zuarbeit und bieten von sich aus
+Unterstützung an, wenn Arbeit zurückgegeben wird (siehe [AGENTS.md](AGENTS.md#teamarbeit-zwischen-den-agenten)).
+Der Eigentümer beobachtet nur und entscheidet über Freigaben.
+
 Ein **Live-Control-Center** zeigt in Echtzeit, was jeder Agent tut, wer mit wem kommuniziert und welche Entscheidungen
 auf den Eigentümer warten.
 

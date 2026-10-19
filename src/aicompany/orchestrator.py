@@ -68,6 +68,7 @@ class Orchestrator:
         self.sleep = sleep
         self.run: RunBudget | None = None
         self.completed: list[str] = []
+        self.help_used = 0
 
     # ================= Lauf-Lebenszyklus =================
     def _start_run(self, trigger: str) -> str:
@@ -118,6 +119,7 @@ class Orchestrator:
         run_id = self._start_run(trigger)
         self.run = RunBudget(run_id=run_id)
         self.completed = []
+        self.help_used = 0
         day = 0
         try:
             ok, reason = c.control.may_dispatch()
@@ -307,6 +309,14 @@ class Orchestrator:
             ctx["economics"] = self._result_derived(self.k("p1.finance.unit_economics")).get("economics", [])
             ctx["qa_review"] = self._result_output(self.k("p1.qa.selection_review"))
             ctx["min_score"] = self.cfg.experiment.min_idea_score
+        notes = self._team_notes(task)
+        if notes:
+            ctx["team_notes"] = notes
+        if task.kind == "consultation":
+            src = by_key.get(task.inputs.get("source_task", ""))
+            ctx["colleague"] = {"agent": task.inputs.get("requester"), "task": task.inputs.get("source_title"),
+                                "mode": task.inputs.get("mode"), "their_feedback": (src.feedback[-2:] if src else []),
+                                "their_last_output": (src.result or {}).get("output") if src else None}
         if task.kind in ("analytics_review", "final_decision"):
             ctx["metrics"] = self._metrics()
             ctx["hypotheses"] = (self._latest_output("positioning") or {}).get("hypotheses", [])
@@ -465,6 +475,8 @@ class Orchestrator:
                           agent=task.agent, task_id=task.id, run_id=self.run.run_id, severity="warning", data={"errors": errors[:10]})
             self._revise_or_fail(task, errors, source="Programmprüfung")
             return "invalid"
+        if self._process_help_requests(task, output):
+            return "waiting_help"
         handler = getattr(self, f"_handle_{task.kind}", None)
         verdict = "accept"
         try:
@@ -508,6 +520,8 @@ class Orchestrator:
                           data={"comm_kind": "message", "automated": True, "reasons": reasons[:5]})
             return
         c.tasks.add_feedback(task.id, source, " | ".join(reasons)[:2000], reasons[:10])
+        if task.revision_count == 0:
+            self._offer_help(task, reasons, from_agent)
         c.tasks.transition(task.id, TS.PENDING, note=f"zur Überarbeitung zurückgegeben ({source})",
                            updates={"revision_count": task.revision_count + 1})
         if from_agent and from_agent != task.agent:
@@ -541,6 +555,96 @@ class Orchestrator:
             " ON CONFLICT(path) DO UPDATE SET task_id=excluded.task_id, sha256=excluded.sha256, size=excluded.size, created_at=excluded.created_at",
             (rel, task.id, task.agent, task.kind, hashlib.sha256(data).hexdigest()[:16], len(data), now_iso()),
         )
+
+    # ================= Teamarbeit =================
+    def _team_notes(self, task: Task) -> list[dict]:
+        """Antworten von Kollegen an diesen Agenten im aktuellen Zyklus (Teamwissen)."""
+        notes = []
+        for t in self.c.tasks.list(agent=None, status=TS.COMPLETED, cycle=task.cycle):
+            if t.kind == "consultation" and t.inputs.get("requester") == task.agent and t.result:
+                out = t.result["output"]
+                notes.append({"from": t.agent, "question": t.inputs.get("question"), "answer": out.get("answer"),
+                              "recommendations": out.get("recommendations", []), "offers": out.get("offers", [])})
+        return notes[-5:]
+
+    def _create_consultation(self, requester: Task, helper: str, question: str, reason: str, mode: str) -> Task | None:
+        c = self.c
+        cfg = self.cfg.collaboration
+        if not cfg.enabled or helper == requester.agent or helper not in ROLES or requester.kind == "consultation":
+            return None
+        if self.help_used >= cfg.max_consultations_per_run:
+            c.events.emit("collab.limit", f"Limit für Teamhilfe in diesem Lauf erreicht – {ROLES[requester.agent].name} arbeitet ohne Kollegenhilfe weiter",
+                          agent=requester.agent, task_id=requester.id, run_id=self.run.run_id, severity="info")
+            return None
+        key = f"help.{requester.key}.{helper}.{hashlib.sha256(question.encode()).hexdigest()[:6]}"
+        spec = TaskSpec(key=key, agent=helper, kind="consultation", phase=requester.phase, cycle=requester.cycle,
+                        title=f"{'Hilfe angeboten' if mode == 'offer' else 'Hilfe'} für {ROLES[requester.agent].name}: "
+                              f"{question[:90] + ('…' if len(question) > 90 else '')}",
+                        goal=question, description=reason, output_format="consultation",
+                        acceptance=["konkrete, umsetzbare Antwort aus der eigenen Fachrolle"], priority=95,
+                        created_by=requester.agent, parent_task_id=requester.id,
+                        inputs={"requester": requester.agent, "question": question, "reason": reason, "mode": mode,
+                                "source_task": requester.key, "source_title": requester.title})
+        ct, new = c.tasks.create(spec, run_id=self.run.run_id)
+        if not new:
+            return ct
+        self.help_used += 1
+        if mode == "offer":
+            c.events.emit("comm.help_offer", f"{ROLES[helper].name} bietet {ROLES[requester.agent].name} Hilfe an: {question[:140]}",
+                          from_agent=helper, to_agent=requester.agent, task_id=ct.id, run_id=self.run.run_id,
+                          data={"comm_kind": "help_offer", "source_task": requester.id})
+        else:
+            c.events.emit("comm.help_request", f"{ROLES[requester.agent].name} bittet {ROLES[helper].name} um Hilfe: {question[:140]}",
+                          from_agent=requester.agent, to_agent=helper, task_id=ct.id, run_id=self.run.run_id,
+                          data={"comm_kind": "help_request", "reason": reason, "source_task": requester.id})
+        return ct
+
+    def _process_help_requests(self, task: Task, output: BaseModel) -> bool:
+        """Hilfeanfragen eines Agenten an Kollegen. Gibt True zurück, wenn die Aufgabe auf die Antwort wartet."""
+        requests = [h for h in getattr(output, "help_requests", []) if h.to_agent != task.agent][:2]
+        if not requests or task.kind == "consultation":
+            return False
+        rounds = int(task.inputs.get("help_rounds", 0))
+        waiting = []
+        for h in requests:
+            ct = self._create_consultation(task, h.to_agent, h.question, h.reason, "request")
+            if ct and h.blocking and rounds < self.cfg.collaboration.max_blocking_help_per_task and ct.status != TS.COMPLETED:
+                waiting.append(ct)
+        if not waiting:
+            return False
+        for ct in waiting:
+            self.c.tasks.add_dependency(task.id, ct.key)
+        names = ", ".join(ROLES[ct.agent].name for ct in waiting)
+        self.c.tasks.transition(task.id, TS.PENDING, note=f"wartet auf Hilfe von {names}", expected={TS.IN_PROGRESS},
+                                updates={"inputs": {**task.inputs, "help_rounds": rounds + 1}})
+        self.c.events.emit("task.waiting_help", f"{ROLES[task.agent].name} wartet auf Hilfe von {names}, bevor „{task.title}“ fertig wird",
+                           agent=task.agent, task_id=task.id, run_id=self.run.run_id)
+        return True
+
+    HELPERS = {"research": ["strategy"], "strategy": ["research", "finance"], "finance": ["strategy"],
+               "product": ["marketing", "qa"], "builder": ["qa", "product"], "marketing": ["sales", "product"],
+               "sales": ["marketing"], "operations": ["qa"], "qa": ["builder"], "analytics": ["finance"], "ceo": []}
+
+    def _offer_help(self, task: Task, reasons: list[str], from_agent: str | None) -> None:
+        """Bei der ersten Rückgabe bietet ein passender Kollege von sich aus Unterstützung an."""
+        if not self.cfg.collaboration.offer_help_on_revision or task.kind in ("consultation", "ceo_review"):
+            return
+        helper = next((h for h in self.HELPERS.get(task.agent, []) if h not in (from_agent, task.agent)), None)
+        if not helper:
+            return
+        ct = self._create_consultation(task, helper, f"Unterstützung bei der Überarbeitung von „{task.title}“: {reasons[0][:200]}",
+                                       "Rückgabe zur Überarbeitung", "offer")
+        if ct and ct.status != TS.COMPLETED:
+            self.c.tasks.add_dependency(task.id, ct.key)
+
+    def _handle_consultation(self, task: Task, output: S.Consultation, derived: dict) -> str:
+        requester = task.inputs.get("requester")
+        if requester in ROLES:
+            self.c.events.emit("comm.help_answer", f"{ROLES[task.agent].name} antwortet {ROLES[requester].name}: {output.answer[:160]}",
+                               from_agent=task.agent, to_agent=requester, task_id=task.id, run_id=self.run.run_id,
+                               severity="success", data={"comm_kind": "help_answer", "recommendations": output.recommendations[:5],
+                                                         "offers": output.offers[:3]})
+        return "accept"
 
     # ================= Handler je Aufgabenart =================
     def _handle_idea_evaluation(self, task: Task, output: S.IdeaEvaluation, derived: dict) -> str:
@@ -843,7 +947,7 @@ class Orchestrator:
                     c.db.set_meta(flag, now_iso())
                     c.events.emit("milestone.achieved", f"Meilenstein erreicht (Zyklus {cyc}): {m['title']}", agent="ceo",
                                   run_id=self.run.run_id if self.run else None, severity="success", data=m)
-        cycle_tasks = [t for t in by_key.values() if t.cycle == cycle and not t.key.startswith(("ceo.review", "followup"))]
+        cycle_tasks = [t for t in by_key.values() if t.cycle == cycle and not t.key.startswith(("ceo.review", "followup", "help."))]
         if not cycle_tasks:
             return
         phase = work_phase(cycle_tasks, ctype).number

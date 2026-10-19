@@ -45,7 +45,7 @@ def test_state_reflects_real_status(client, company):
     assert s["selected_idea"]["id"] == "angebotsrechner-handwerk"
     assert by["research"]["progress"] == {"completed": 1, "total": 1}
     assert by["research"]["cost_eur"] > 0
-    assert s["progress"]["completed"] == len([t for t in s["tasks"] if t["status"] == "completed" and not t["key"].startswith("ceo.review")])
+    assert s["progress"]["completed"] == len([t for t in s["tasks"] if t["status"] == "completed" and not t["key"].startswith(("ceo.review", "help.", "followup."))])
     assert any(m["achieved"] for m in s["milestones"])
     for a in s["agents"]:
         mine = [t for t in s["tasks"] if t["agent"] == a["id"]]

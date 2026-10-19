@@ -128,7 +128,7 @@ def company_snapshot(company: Company) -> dict:
     s = company.settings
     tasks = [t for t in company.tasks.list()]
     cycle, ctype = company.clock.cycle(), company.clock.cycle_type()
-    workflow_tasks = [t for t in tasks if t.cycle == cycle and not t.key.startswith(("ceo.review.", "followup."))]
+    workflow_tasks = [t for t in tasks if t.cycle == cycle and not t.key.startswith(("ceo.review.", "followup.", "help."))]
     by_key = {t.key: t for t in tasks}
     day = company.clock.day()
     selected = company.db.get_meta("selected_idea")

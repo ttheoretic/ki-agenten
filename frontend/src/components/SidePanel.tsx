@@ -47,7 +47,7 @@ function AgentPanel({ id }: { id: string }) {
         <span className="avatar big" style={{ borderColor: st.color }}>{data.name.slice(0, 2)}</span>
         <div><h2>{data.name}</h2><div className="muted">{data.title} · {data.group_label}</div></div>
       </div>
-      <div className="status-line" style={{ color: st.color }}>{st.icon} {st.label}</div>
+      <div className="status-line"><span className="dot" style={{ background: st.color }} />{st.label}</div>
       <button className="btn" onClick={togglePause}>{data.paused ? "▶ Agent aktivieren" : "❚❚ Agent pausieren"}</button>
       <section><h3>Mission</h3><p>{data.mission}</p>
         <ul className="bullets">{data.responsibilities.map((r) => <li key={r}>{r}</li>)}</ul></section>

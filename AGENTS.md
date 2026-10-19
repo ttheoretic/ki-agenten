@@ -1,6 +1,6 @@
 # Agenten, Verantwortlichkeiten und Regeln
 
-Alle Agenten können dasselbe Modell nutzen. Entscheidend sind Aufgabenart, Ausgabeschema, Werkzeuge und Schreibrechte.
+Alle Agenten können dasselbe Modell nutzen. Zusätzlich zu den unten genannten Aufgabenarten kann jeder Agent `consultation` (Kollegenhilfe) übernehmen. Entscheidend sind Aufgabenart, Ausgabeschema, Werkzeuge und Schreibrechte.
 Werkzeuge und Schreibrechte setzt `config/security.toml` durch. Die Zuständigkeit für Aufgabenarten prüft der Orchestrator.
 Eine Aufgabe, deren Art nicht zur Rolle passt, schlägt fehl. Deshalb kann der CEO keine Spezialaufgaben selbst übernehmen.
 
@@ -49,6 +49,21 @@ Eine Aufgabe, deren Art nicht zur Rolle passt, schlägt fehl. Deshalb kann der C
 | Betrieb und Release | Operations | Eigentümer (Freigabe der Veröffentlichung) |
 | Monatsabschluss | Finance | Programm |
 | Zyklusentscheidung | CEO | Programm plant den nächsten Zyklus |
+
+## Teamarbeit zwischen den Agenten
+
+Die Agenten arbeiten nicht nur nacheinander ab, sondern unterstützen sich gegenseitig:
+
+| Mechanismus | Ablauf | Durchsetzung im Programm |
+|---|---|---|
+| **Hilfeanfrage** | Jedes Ergebnis kann bis zu 2 `help_requests` an Kollegen enthalten (z. B. Marketing fragt Finance nach dem realistischen Preisrahmen). | Für jede Anfrage entsteht eine Aufgabe `consultation` beim Kollegen; Ereignisse `comm.help_request` und `comm.help_answer`. |
+| **Warten auf Zuarbeit** | Ist eine Anfrage `blocking`, legt der Agent sein Ergebnis zurück und macht nach der Antwort weiter. | Abhängigkeit auf die Hilfeaufgabe, höchstens `max_blocking_help_per_task` Runden; zählt nicht als Überarbeitung. |
+| **Hilfe anbieten** | Wird Arbeit zur Überarbeitung zurückgegeben, bietet ein fachlich passender Kollege von sich aus Unterstützung an (z. B. Product hilft dem Builder nach einem QA-Befund). | Zuordnung in `Orchestrator.HELPERS`, nie der Kritiker selbst; Ereignis `comm.help_offer`. |
+| **Teamwissen** | Antworten von Kollegen bekommt der Agent als `team_notes` in jeden weiteren Auftrag des Zyklus. | Kontextaufbau im Orchestrator. |
+
+Grenzen: höchstens `max_consultations_per_run` Hilfeaufgaben pro Lauf (Standard 4). Jede Hilfeaufgabe ist ein normaler,
+budgetierter Agentenaufruf. Schlägt eine Hilfe fehl, arbeitet der Agent ohne sie weiter und wird nicht blockiert.
+Abschaltbar über `[collaboration] enabled = false`.
 
 ## Regeln für alle Agenten (im Prompt **und** im Programm)
 

@@ -178,6 +178,10 @@ def validate(kind: str, output: BaseModel, *, ctx: dict[str, Any], policy: Secur
             if any(h.status in ("supported", "rejected") for h in output.hypothesis_results):
                 errors.append("Ohne Messdaten kann keine Hypothese bestätigt oder widerlegt werden")
 
+    elif isinstance(output, S.Consultation):
+        if len(output.answer.strip()) < 10:
+            errors.append("Die Antwort an den Kollegen ist leer oder zu knapp")
+
     elif isinstance(output, S.FinalDecision):
         if not output.rationale.strip():
             errors.append("Begründung fehlt")

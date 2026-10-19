@@ -14,7 +14,7 @@ from .db import Database, dumps, loads, now_iso
 from .security import Redactor
 
 # Ereignisarten, die eine echte Kommunikation/Übergabe zwischen zwei Agenten darstellen
-COMM_TYPES = {"comm.assignment", "comm.handoff", "comm.message", "comm.feedback"}
+COMM_TYPES = {"comm.assignment", "comm.handoff", "comm.message", "comm.feedback", "comm.help_request", "comm.help_answer", "comm.help_offer"}
 
 SEVERITIES = ("debug", "info", "success", "warning", "error", "critical")
 

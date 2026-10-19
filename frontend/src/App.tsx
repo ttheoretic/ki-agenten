@@ -32,6 +32,11 @@ export default function App({ replay }: { replay?: ReplayEngine }) {
   const [token, setToken] = useState<string | null>(() => (replay ? "vorschau" : readToken()));
   const [state, dispatch] = useReducer(reducer, initialState);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [tab, setTab] = useState("overview");
+  const openTab = useCallback((t: string) => {
+    setTab(t);
+    document.getElementById("tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
   const [toasts, setToasts] = useState<{ id: number; msg: string; kind: string }[]>([]);
   const [now, setNow] = useState(() => (replay ? replay.now() : Date.now()));
   const live = useRef<LiveConnection | null>(null);
@@ -80,12 +85,12 @@ export default function App({ replay }: { replay?: ReplayEngine }) {
     <AppContext.Provider value={ctx}>
       <div className="app">
         {replay ? (
-          <div className="demo-banner" role="status">VORSCHAU – Aufzeichnung eines echten Dry-Runs im Zeitraffer. Agentenantworten sind simuliert,
-            Eigentümer-Entscheidungen und Kennzahlen sind DEMO-Werte. Buttons sind hier deaktiviert.</div>
+          <div className="notice" role="status">Vorschau: Aufzeichnung eines Dry-Runs im Zeitraffer. Agentenantworten sind simuliert,
+            Freigaben und Kennzahlen sind Demo-Werte, die Steuerung ist deaktiviert.</div>
         ) : snap?.simulated && (
-          <div className="demo-banner" role="status">DRY-RUN / DEMO-MODUS – alle Agentenantworten und Kosten sind simuliert. Es finden keine echten API-Aufrufe statt.</div>
+          <div className="notice" role="status">Dry-Run: Agentenantworten und Kosten sind simuliert, es finden keine echten API-Aufrufe statt.</div>
         )}
-        <Header />
+        <Header onOpenTab={openTab} />
         {!snap ? (
           <div className="loading">{state.conn === "offline" ? `Backend nicht erreichbar: ${state.error ?? ""}` : "Verbinde mit dem Backend …"}</div>
         ) : (
@@ -94,7 +99,7 @@ export default function App({ replay }: { replay?: ReplayEngine }) {
               <section className="map-section"><CompanyMap /></section>
               <aside className="feed-section"><ActivityFeed /></aside>
             </main>
-            <BottomTabs />
+            <BottomTabs tab={tab} setTab={setTab} />
           </>
         )}
         {panel && <SidePanel panel={panel} onClose={() => setPanel(null)} />}
