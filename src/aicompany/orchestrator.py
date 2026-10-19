@@ -32,7 +32,7 @@ from .processing import summarize_markdown, validate
 from .scoring import check_selection, score_all
 from .security import PermissionDenied
 from .tasks import Task, TaskSpec, TaskStatus
-from .workflow import PHASES, milestones, seed, work_phase
+from .workflow import CYCLE_TYPES, FINAL_TASK, NEXT_CYCLE, PHASE_BY_NUMBER, cycle_key, milestones, seed, work_phase
 
 TS = TaskStatus
 FOLLOWUP_KINDS = {"research": "market_research", "strategy": "idea_evaluation", "finance": "finance_assessment",
@@ -73,7 +73,7 @@ class Orchestrator:
     def _start_run(self, trigger: str) -> str:
         db = self.c.db
         stale = (datetime.now(timezone.utc) - timedelta(seconds=self.cfg.orchestrator.run_stale_after_seconds)).isoformat()
-        run_id = "R-" + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:4]
+        run_id = "R-" + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
         crashed = []
         with db.transaction() as conn:
             for r in conn.execute("SELECT id, heartbeat_at FROM runs WHERE status='running'").fetchall():
@@ -124,24 +124,25 @@ class Orchestrator:
             if not ok:
                 return self._finish_run("skipped", reason, c.clock.day())
             if c.db.get_meta("experiment_status") == "finished":
-                return self._finish_run("skipped", "Experiment abgeschlossen", c.clock.day())
+                return self._finish_run("skipped", "Unternehmen beendet (maximale Zyklenzahl erreicht)", c.clock.day())
             if not c.db.get_meta("workflow_seeded"):
                 c.clock.start()
-                n = seed(c.tasks, run_id=run_id)
+                n = seed(c.tasks, run_id=run_id, cycle=1, cycle_type="launch")
                 c.db.set_meta("workflow_seeded", "1")
-                c.events.emit("ceo.decision", f"30-Tage-Experiment gestartet, {n} Aufgaben geplant", agent="ceo", run_id=run_id,
-                              severity="success", data={"goal": self.cfg.company.goal})
+                self._record_cycle_start(1, "launch", None)
+                c.events.emit("ceo.decision", f"Unternehmen gegründet – Zyklus 1 (Gründung) mit {n} Aufgaben geplant", agent="ceo",
+                              run_id=run_id, severity="success", data={"goal": self.cfg.company.goal, "cycle": 1})
             c.clock.advance_run()
             day = c.clock.day()
-            c.events.emit("run.started", f"Geschäftslauf gestartet (Tag {day}/{self.cfg.experiment.days}, {c.mode_label()})",
-                          agent="ceo", run_id=run_id, data={"day": day, "trigger": trigger, "mode": self.cfg.mode})
+            c.events.emit("run.started", f"Geschäftslauf gestartet (Zyklus {c.clock.cycle()}, Tag {day}/{c.clock.days}, {c.mode_label()})",
+                          agent="ceo", run_id=run_id, data={"day": day, "cycle": c.clock.cycle(), "trigger": trigger, "mode": self.cfg.mode})
             if c.budget.exhausted():
                 return self._finish_run("budget_exhausted", "Monatsbudget ausgeschöpft – automatischer Stopp", day)
             c.approvals.expire_old()
             c.approvals.execute_due()
-            reason = await self._loop(day)
+            reason = await self._loop()
             self._update_milestones()
-            return self._finish_run("completed", reason, day)
+            return self._finish_run("completed", reason, c.clock.day())
         except asyncio.CancelledError:
             self._finish_run("cancelled", "Lauf abgebrochen", day)
             raise
@@ -150,11 +151,14 @@ class Orchestrator:
             c.tasks.recover_stale(set(), run_id=run_id)
             return self._finish_run("failed", f"Fehler: {exc}", day)
 
-    async def _loop(self, day: int) -> str:
+    async def _loop(self) -> str:
         c = self.c
         ceo_planned = False
         while True:
             self._heartbeat()
+            day, cycle = c.clock.day(), c.clock.cycle()  # kann sich mitten im Lauf ändern (neuer Zyklus)
+            if c.db.get_meta("experiment_status") == "finished":
+                return "Unternehmen beendet (maximale Zyklenzahl erreicht)"
             ok, reason = c.control.may_dispatch()
             if not ok:
                 return reason
@@ -164,7 +168,7 @@ class Orchestrator:
             self._update_milestones()
             paused = c.control.paused_agents()
             review = [t for t in c.tasks.list(status=TS.REVIEW) if t.review_by == "ceo"]
-            ready = c.tasks.ready(current_day=day, paused_agents=paused)
+            ready = c.tasks.ready(current_day=day, paused_agents=paused, cycle=cycle)
             ready = [t for t in ready if t.kind != "ceo_review"]
             if self.run.calls_used >= self.cfg.budget.max_agent_calls_per_run:
                 return f"Limit von {self.cfg.budget.max_agent_calls_per_run} Agentenaufrufen pro Lauf erreicht"
@@ -185,15 +189,15 @@ class Orchestrator:
                 return stop
 
     def _idle_reason(self, day: int, paused: set[str]) -> str:
-        tasks = self.c.tasks.list()
+        tasks = self.c.tasks.list(cycle=self.c.clock.cycle())
         if all(t.status == TS.COMPLETED for t in tasks):
-            return "Alle Aufgaben abgeschlossen"
+            return "Alle Aufgaben des Zyklus abgeschlossen"
         pending = [t for t in tasks if t.status == TS.PENDING]
         later = [t for t in pending if t.not_before_day > day]
         if any(t.status == TS.REVIEW for t in tasks) and "ceo" in paused:
             return "Wartet auf CEO-Review (CEO pausiert)"
         if later and len(later) == len(pending):
-            return f"Wartet auf Experimenttag {min(t.not_before_day for t in later)} (heute Tag {day})"
+            return f"Wartet auf Zyklustag {min(t.not_before_day for t in later)} (heute Tag {day})"
         if any(t.agent in paused for t in pending):
             return "Wartet auf pausierte Agenten"
         if any(t.status in (TS.FAILED, TS.BLOCKED) for t in tasks):
@@ -222,6 +226,21 @@ class Orchestrator:
         return stop_reason
 
     # ================= Kontext & Aufruf =================
+    def k(self, key: str) -> str:
+        """Key im aktuellen Zyklus."""
+        return cycle_key(key, self.c.clock.cycle())
+
+    def _latest_output(self, kind: str) -> dict | None:
+        """Neuestes abgeschlossenes Ergebnis einer Aufgabenart über alle Zyklen (z. B. Recherche für einen Kurswechsel)."""
+        done = [t for t in self.c.tasks.list(status=TS.COMPLETED) if t.kind == kind and t.result]
+        done.sort(key=lambda t: t.completed_at or "")
+        return done[-1].result.get("output") if done else None
+
+    def _company_memory(self) -> dict:
+        """Was das Unternehmen aus früheren Zyklen weiß: versuchte Ideen, Entscheidungen, Lehren."""
+        return {"tried_ideas": json.loads(self.c.db.get_meta("tried_ideas", "[]") or "[]"),
+                "cycles": json.loads(self.c.db.get_meta("cycles", "[]") or "[]")[-5:]}
+
     def _result_output(self, key: str) -> dict | None:
         t = self.c.tasks.get_by_key(key)
         return (t.result or {}).get("output") if t and t.result else None
@@ -231,7 +250,11 @@ class Orchestrator:
         return (t.result or {}).get("derived", {}) if t and t.result else {}
 
     def _metrics(self) -> list[dict]:
-        rows = self.c.db.query("SELECT ts, name, value, unit, source, note FROM metrics WHERE source != 'demo' ORDER BY ts")
+        """Messwerte des aktuellen Zyklus – Zahlen einer früheren (verworfenen) Idee zählen nicht für die neue."""
+        cycles = json.loads(self.c.db.get_meta("cycles", "[]") or "[]")
+        since = cycles[-1]["started_at"] if len(cycles) > 1 else ""
+        rows = self.c.db.query("SELECT ts, name, value, unit, source, note FROM metrics WHERE source != 'demo' AND ts >= ? ORDER BY ts",
+                               (since,))
         return [dict(r) for r in rows]
 
     def _selected_idea(self) -> dict | None:
@@ -248,19 +271,29 @@ class Orchestrator:
                            "derived": dep.result.get("derived", {})}
                 deps_by_kind.setdefault(dep.kind, []).append(dep.result.get("output"))
         ctx: dict[str, Any] = {"task_inputs": task.inputs, "deps": deps, "deps_by_kind": deps_by_kind,
-                               "selected_idea": self._selected_idea(), "company_goal": self.cfg.company.goal}
+                               "selected_idea": self._selected_idea(), "company_goal": self.cfg.company.goal,
+                               "cycle": task.cycle, "cycle_type": task.inputs.get("cycle_type", "launch"),
+                               "company_memory": self._company_memory()}
+        if task.kind in ("market_research", "idea_evaluation", "ceo_decision"):
+            ctx["excluded_ideas"] = ctx["company_memory"]["tried_ideas"]
+        if task.kind == "idea_evaluation" and "market_research" not in deps_by_kind:
+            latest = self._latest_output("market_research")  # Kurswechsel: vorhandene Recherche neu bewerten
+            if latest:
+                deps_by_kind["market_research"] = [latest]
+                ctx["previous_research"] = latest
         if task.inputs.get("followup"):
             ctx["followup"] = True
         if task.kind == "finance_assessment":
-            rec = (self._result_output("p1.strategy.evaluate") or {}).get("recommendation", {})
+            rec = (self._result_output(self.k("p1.strategy.evaluate")) or {}).get("recommendation", {})
             ctx["recommended_idea"] = rec.get("idea_id")
             ctx["metrics"] = self._metrics()
         if task.kind == "build":
             ctx["target_dir"] = task.inputs.get("target_dir", "product")
-            ctx["mvp_spec"] = self._result_output("p2.product.mvp_spec")
+            ctx["mvp_spec"] = (deps_by_kind.get("mvp_spec") or [None])[-1] or self._result_output(self.k("p2.product.mvp_spec"))
             deps_by_kind.setdefault("positioning", [])
-            if not deps_by_kind["positioning"] and self._result_output("p3.marketing.positioning"):
-                deps_by_kind["positioning"].append(self._result_output("p3.marketing.positioning"))
+            positioning = self._result_output(self.k("p3.marketing.positioning")) or self._latest_output("positioning")
+            if not deps_by_kind["positioning"] and positioning:
+                deps_by_kind["positioning"].append(positioning)
         if task.kind == "qa_review":
             target = by_key.get(task.inputs.get("review_target", ""))
             if target:
@@ -268,13 +301,15 @@ class Orchestrator:
                                         "revision_count": target.revision_count, "output": (target.result or {}).get("output")}
                 ctx["automated_checks"] = (target.result or {}).get("derived", {}).get("automated_checks")
         if task.kind == "ceo_decision":
-            ctx["scorecards"] = self._result_derived("p1.strategy.evaluate").get("scorecards", [])
-            ctx["economics"] = self._result_derived("p1.finance.unit_economics").get("economics", [])
-            ctx["qa_review"] = self._result_output("p1.qa.selection_review")
+            tried = set(ctx["excluded_ideas"])
+            ctx["scorecards"] = [sc for sc in self._result_derived(self.k("p1.strategy.evaluate")).get("scorecards", [])
+                                 if sc["idea_id"] not in tried]
+            ctx["economics"] = self._result_derived(self.k("p1.finance.unit_economics")).get("economics", [])
+            ctx["qa_review"] = self._result_output(self.k("p1.qa.selection_review"))
             ctx["min_score"] = self.cfg.experiment.min_idea_score
         if task.kind in ("analytics_review", "final_decision"):
             ctx["metrics"] = self._metrics()
-            ctx["hypotheses"] = (self._result_output("p3.marketing.positioning") or {}).get("hypotheses", [])
+            ctx["hypotheses"] = (self._latest_output("positioning") or {}).get("hypotheses", [])
         return ctx
 
     def _prompt(self, task: Task, ctx: dict[str, Any]) -> str:
@@ -578,12 +613,14 @@ class Orchestrator:
             self._revise_or_fail(task, ["Zusatzrecherche nicht mehr möglich (Limit) – CEO muss auf Basis der vorhandenen Daten entscheiden"],
                                  source="Programmprüfung")
             return "revise_done"
-        evaluation = self._result_output("p1.strategy.evaluate")
+        evaluation = self._result_output(self.k("p1.strategy.evaluate"))
         cards = score_all(S.IdeaEvaluation.model_validate(evaluation)) if evaluation else []
-        fin_raw = self._result_output("p1.finance.unit_economics")
-        qa_raw = self._result_output("p1.qa.selection_review")
+        fin_raw = self._result_output(self.k("p1.finance.unit_economics"))
+        qa_raw = self._result_output(self.k("p1.qa.selection_review"))
+        tried = self._company_memory()["tried_ideas"]
         check = check_selection(output.selected_idea_id, cards, S.FinanceAssessment.model_validate(fin_raw) if fin_raw else None,
-                                S.QAReview.model_validate(qa_raw) if qa_raw else None, self.cfg.experiment.min_idea_score)
+                                S.QAReview.model_validate(qa_raw) if qa_raw else None, self.cfg.experiment.min_idea_score,
+                                excluded=tried)
         derived["selection_check"] = check.model_dump()
         if not check.allowed:
             c.events.emit("ceo.decision_blocked", f"Auswahl von '{output.selected_idea_id}' durch Programmregeln abgelehnt",
@@ -593,7 +630,8 @@ class Orchestrator:
         card = check.scorecard
         idea = {"id": card.idea_id, "name": card.name, "score": card.total, "selected_at": now_iso(), "rationale": output.rationale}
         c.db.set_meta("selected_idea", json.dumps(idea, ensure_ascii=False))
-        c.db.execute("UPDATE ideas SET status = CASE WHEN id=? THEN 'selected' ELSE 'not_selected' END", (card.idea_id,))
+        self._update_cycle_record(idea=idea["name"])
+        c.db.execute("UPDATE ideas SET status = CASE WHEN id=? THEN 'selected' WHEN status='tried' THEN 'tried' ELSE 'not_selected' END", (card.idea_id,))
         self._decision(task, "idea_selection", f"Geschäftsidee ausgewählt: {card.name} ({card.total} Punkte)", output.rationale,
                        {"idea": idea, "criteria_used": output.criteria_used, "risks_accepted": output.risks_accepted,
                         "conditions": output.conditions})
@@ -640,13 +678,54 @@ class Orchestrator:
         return "accept"
 
     def _handle_final_decision(self, task: Task, output: S.FinalDecision, derived: dict) -> str:
-        labels = {"continue": "Fortführung", "pivot": "Kurswechsel", "stop": "Beendigung"}
-        self._decision(task, "final_decision", f"Abschlussentscheidung: {labels[output.decision]}", output.rationale, output.model_dump())
-        self.c.db.set_meta("experiment_status", "finished")
+        labels = {"continue": "Weiter im laufenden Betrieb", "pivot": "Kurswechsel zur nächsten Idee", "stop": "Nische aufgeben, neue Nische suchen"}
+        self._decision(task, "cycle_decision", f"Zyklusentscheidung: {labels[output.decision]}", output.rationale, output.model_dump())
         self.c.db.set_meta("final_decision", output.decision)
-        self.c.events.emit("goal.status", f"30-Tage-Experiment beendet – Entscheidung: {labels[output.decision]}", agent="ceo",
-                           task_id=task.id, run_id=self.run.run_id, severity="success")
+        derived["next_cycle"] = self._start_next_cycle(output, task)
         return "accept"
+
+    def _record_cycle_start(self, cycle: int, cycle_type: str, reason: str | None) -> None:
+        cycles = json.loads(self.c.db.get_meta("cycles", "[]") or "[]")
+        idea = self._selected_idea()
+        cycles.append({"cycle": cycle, "type": cycle_type, "label": CYCLE_TYPES[cycle_type]["label"], "started_at": now_iso(),
+                       "idea": idea["name"] if idea and cycle_type == "operate" else None, "reason": reason,
+                       "decision": None, "ended_at": None})
+        self.c.db.set_meta("cycles", json.dumps(cycles, ensure_ascii=False))
+
+    def _update_cycle_record(self, **fields) -> None:
+        cycles = json.loads(self.c.db.get_meta("cycles", "[]") or "[]")
+        if cycles:
+            cycles[-1].update(fields)
+            self.c.db.set_meta("cycles", json.dumps(cycles, ensure_ascii=False))
+
+    def _start_next_cycle(self, output: S.FinalDecision, task: Task) -> dict:
+        """Das Unternehmen läuft weiter: nach jeder Zyklusentscheidung wird der nächste Zyklus automatisch geplant."""
+        c = self.c
+        cycle = c.clock.cycle()
+        next_type = NEXT_CYCLE[output.decision]
+        self._update_cycle_record(decision=output.decision, ended_at=now_iso(), rationale=output.rationale[:500])
+        idea = self._selected_idea()
+        if output.decision in ("pivot", "stop") and idea:
+            tried = json.loads(c.db.get_meta("tried_ideas", "[]") or "[]")
+            if idea["id"] not in tried:
+                tried.append(idea["id"])
+            c.db.set_meta("tried_ideas", json.dumps(tried))
+            c.db.execute("UPDATE ideas SET status='tried' WHERE id=?", (idea["id"],))
+            c.db.execute("DELETE FROM meta WHERE key='selected_idea'")
+        if cycle >= self.cfg.experiment.max_cycles:
+            c.db.set_meta("experiment_status", "finished")
+            c.events.emit("goal.status", f"Maximale Zyklenzahl ({self.cfg.experiment.max_cycles}) erreicht – Unternehmen hält an",
+                          agent="ceo", task_id=task.id, run_id=self.run.run_id, severity="warning")
+            return {"started": False, "reason": "max_cycles"}
+        new_cycle = cycle + 1
+        c.clock.start_cycle(new_cycle, next_type, runs=1)
+        lessons = {"previous_decision": output.decision, "lessons": output.lessons, "next_steps": output.next_steps}
+        n = seed(c.tasks, run_id=self.run.run_id, cycle=new_cycle, cycle_type=next_type, extra_inputs={"lessons": lessons})
+        self._record_cycle_start(new_cycle, next_type, output.rationale[:300])
+        c.events.emit("cycle.started", f"Zyklus {new_cycle} gestartet: {CYCLE_TYPES[next_type]['label']} ({n} Aufgaben, "
+                      f"{CYCLE_TYPES[next_type]['days']} Tage)", agent="ceo", task_id=task.id, run_id=self.run.run_id,
+                      severity="success", data={"cycle": new_cycle, "type": next_type, "decision": output.decision})
+        return {"started": True, "cycle": new_cycle, "type": next_type}
 
     def _decision(self, task: Task | None, kind: str, summary: str, rationale: str, data: dict) -> None:
         self.c.db.execute("INSERT INTO decisions(ts, agent, task_id, kind, summary, rationale, data) VALUES (?,?,?,?,?,?,?)",
@@ -663,11 +742,11 @@ class Orchestrator:
                           run_id=self.run.run_id, severity="warning")
             return None
         key = f"followup.{agent}.{hashlib.sha256(question.encode()).hexdigest()[:8]}"
-        phase = work_phase(c.tasks.list()).number
+        phase = work_phase(c.tasks.list(cycle=c.clock.cycle()), c.clock.cycle_type()).number
         spec = TaskSpec(key=key, agent=agent, kind=FOLLOWUP_KINDS[agent], phase=phase, title=f"Nachrecherche: {question[:70]}",
                         goal=question, description=f"Vom CEO angefordert. Begründung: {reason}", output_format=FOLLOWUP_KINDS[agent],
                         acceptance=["beantwortet die Frage mit belegten Aussagen"], priority=85, created_by="ceo",
-                        parent_task_id=parent.id if parent else None, inputs={"followup": True, "question": question})
+                        parent_task_id=parent.id if parent else None, inputs={"followup": True, "question": question}, cycle=c.clock.cycle())
         task, new = c.tasks.create(spec, run_id=self.run.run_id)
         if new:
             c.db.set_meta("followups_created", str(count + 1))
@@ -681,11 +760,12 @@ class Orchestrator:
         c = self.c
         n = int(c.db.get_meta("ceo_review_count", "0") or 0) + 1
         c.db.set_meta("ceo_review_count", str(n))
-        phase = work_phase(c.tasks.list()).number
+        phase = work_phase(c.tasks.list(cycle=c.clock.cycle()), c.clock.cycle_type()).number
         spec = TaskSpec(key=f"ceo.review.{n}", agent="ceo", kind="ceo_review", phase=phase, title=f"CEO-Lagebesprechung #{n}",
                         goal="Ergebnisse prüfen, Prioritäten setzen, Konflikte erkennen, nächsten Schritt bestimmen",
                         description="Akzeptiere oder überarbeite vorgelegte Ergebnisse; priorisiere ausführbare Aufgaben.",
-                        output_format="ceo_review", acceptance=["jede vorgelegte Aufgabe bewertet"], priority=100, created_by="ceo")
+                        output_format="ceo_review", acceptance=["jede vorgelegte Aufgabe bewertet"], priority=100, created_by="ceo",
+                        cycle=c.clock.cycle())
         task, _ = c.tasks.create(spec, run_id=self.run.run_id)
         if not c.tasks.claim(task.id, self.run.run_id):
             return
@@ -694,7 +774,7 @@ class Orchestrator:
             c.events.emit("comm.handoff", f"{ROLES[t.agent].name} übergibt „{t.title}“ zur Prüfung an den CEO", from_agent=t.agent,
                           to_agent="ceo", task_id=t.id, run_id=self.run.run_id, data={"comm_kind": "handoff", "artifacts": t.artifacts})
         ctx = {
-            "day": day, "phase": PHASES[phase - 1].name,
+            "day": day, "phase": PHASE_BY_NUMBER[phase].name, "cycle": c.clock.cycle(), "company_memory": self._company_memory(),
             "review_tasks": [{"id": t.id, "key": t.key, "kind": t.kind, "title": t.title, "agent": t.agent,
                               "revision_count": t.revision_count, "acceptance": t.acceptance,
                               "output": (t.result or {}).get("output")} for t in review],
@@ -752,20 +832,28 @@ class Orchestrator:
     # ================= Meilensteine =================
     def _update_milestones(self) -> None:
         c = self.c
+        cycle, ctype = c.clock.cycle(), c.clock.cycle_type()
         by_key = c.tasks.by_keys()
-        for m in milestones(by_key):
-            flag = f"milestone_{m['id']}"
-            if m["achieved"] and not c.db.get_meta(flag):
-                c.db.set_meta(flag, now_iso())
-                c.events.emit("milestone.achieved", f"Meilenstein erreicht: {m['title']}", agent="ceo",
-                              run_id=self.run.run_id if self.run else None, severity="success", data=m)
-        phase = work_phase(list(by_key.values())).number
+        # auch den gerade beendeten Zyklus prüfen (seine Abschlussentscheidung startet den neuen Zyklus)
+        recent = [(e["cycle"], e["type"]) for e in json.loads(c.db.get_meta("cycles", "[]") or "[]")[-2:]] or [(cycle, ctype)]
+        for cyc, cyc_type in recent:
+            for m in milestones(by_key, cyc, cyc_type):
+                flag = f"milestone_c{cyc}_{m['id']}"
+                if m["achieved"] and not c.db.get_meta(flag):
+                    c.db.set_meta(flag, now_iso())
+                    c.events.emit("milestone.achieved", f"Meilenstein erreicht (Zyklus {cyc}): {m['title']}", agent="ceo",
+                                  run_id=self.run.run_id if self.run else None, severity="success", data=m)
+        cycle_tasks = [t for t in by_key.values() if t.cycle == cycle and not t.key.startswith(("ceo.review", "followup"))]
+        if not cycle_tasks:
+            return
+        phase = work_phase(cycle_tasks, ctype).number
+        marker = f"{cycle}:{phase}"
         old = c.db.get_meta("work_phase")
-        if old != str(phase):
-            c.db.set_meta("work_phase", str(phase))
+        if old != marker:
+            c.db.set_meta("work_phase", marker)
             if old:
-                c.events.emit("phase.changed", f"Neue Phase: {PHASES[phase - 1].name}", agent="ceo",
-                              run_id=self.run.run_id if self.run else None, severity="success", data={"phase": phase})
+                c.events.emit("phase.changed", f"Neue Phase: {PHASE_BY_NUMBER[phase].name}", agent="ceo",
+                              run_id=self.run.run_id if self.run else None, severity="success", data={"phase": phase, "cycle": cycle})
 
 
 class _ApiDown(Exception):

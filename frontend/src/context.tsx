@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Api } from "./api";
+import type { ApiLike } from "./replay";
 import type { State } from "./store";
 
 export type Panel =
@@ -10,12 +10,13 @@ export type Panel =
   | { kind: "task"; id: string };
 
 export interface Ctx {
-  api: Api;
+  api: ApiLike;
   state: State;
   refresh: () => Promise<void>;
   open: (p: Panel) => void;
   toast: (msg: string, kind?: "ok" | "error") => void;
   now: number;
+  replay?: boolean;
 }
 
 export const AppContext = createContext<Ctx | null>(null);

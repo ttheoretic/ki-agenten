@@ -3,7 +3,8 @@ import { useApp } from "../context";
 import { COMPANY_STATUS, eur, clock } from "../labels";
 
 function ConnBadge() {
-  const { state } = useApp();
+  const { state, replay } = useApp();
+  if (replay) return <div className="conn conn-live" role="status" data-testid="conn-status"><span className="dot" />Wiedergabe der Aufzeichnung</div>;
   const labels = { connecting: "Verbinde …", live: "Live verbunden", reconnecting: "Verbindung unterbrochen – verbinde neu", offline: "Backend nicht erreichbar" };
   const stale = state.conn !== "live" && state.snapshotAt;
   return (
@@ -27,8 +28,8 @@ function Meter({ label, value, limit, testid }: { label: string; value: number; 
 }
 
 export function Header() {
-  const { state, api, refresh, toast } = useApp();
-  const [busy, setBusy] = useState<string | null>(null);
+  const { state, api, refresh, toast, replay } = useApp();
+  const [busy, setBusy] = useState<string | null>(replay ? "replay" : null);
   const s = state.snapshot;
 
   async function act(name: string, fn: () => Promise<unknown>, okMsg: string) {
@@ -94,7 +95,9 @@ export function Header() {
             </div>
           </div>
           <div className="mission-timeline">
-            <div className="label">30-Tage-Experiment · {exp.started ? `Tag ${exp.day}/${exp.days}` : "Wartet auf ersten Lauf"}
+            <div className="label" data-testid="cycle-label">{exp.started
+              ? `Zyklus ${exp.cycle} · ${exp.cycle_label} · Tag ${exp.day}/${exp.days}`
+              : "Wartet auf ersten Lauf"}
               {exp.clock === "accelerated" && <span className="muted"> (beschleunigte Dry-Run-Uhr)</span>}</div>
             <div className="timeline">
               {exp.phases.map((p) => {

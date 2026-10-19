@@ -94,9 +94,11 @@ def cmd_demo(args) -> int:
     for _ in range(args.max_runs):
         s = asyncio.run(Orchestrator(c).run_once("demo"))
         _print_summary(s)
-        if c.db.get_meta("experiment_status") == "finished" or s.status in ("skipped", "failed", "budget_exhausted"):
+        if c.db.get_meta("experiment_status") == "finished" or s.status in ("skipped", "failed", "budget_exhausted") \
+                or c.clock.cycle() > args.cycles:
             break
-    print(f"\nOffene Freigaben: {len(c.approvals.list('open'))}. Control-Center: aicompany serve --data-dir {data_dir}")
+    print(f"\nAktueller Zyklus: {c.clock.cycle()} ({c.clock.cycle_type()})")
+    print(f"Offene Freigaben: {len(c.approvals.list('open'))}. Control-Center: aicompany serve --data-dir {data_dir}")
     return 0
 
 
@@ -161,7 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("preflight").set_defaults(fn=cmd_preflight)
     sub.add_parser("run").set_defaults(fn=cmd_run)
     d = sub.add_parser("demo")
-    d.add_argument("--max-runs", type=int, default=10)
+    d.add_argument("--max-runs", type=int, default=12)
+    d.add_argument("--cycles", type=int, default=1, help="so viele Zyklen durchlaufen (danach Stopp der Demo)")
     d.add_argument("--keep", action="store_true", help="vorhandene Demo-Daten nicht löschen")
     d.set_defaults(fn=cmd_demo)
     sc = sub.add_parser("scheduler")

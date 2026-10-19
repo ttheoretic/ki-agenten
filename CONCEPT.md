@@ -13,6 +13,35 @@ Entscheidungen nach dokumentierten Kriterien. Alles wird in SQLite gespeichert. 
 Stelle fort. Der Mensch (Eigentümer) beobachtet im **Live-Control-Center** und entscheidet nur dort, wo es nötig ist:
 bei externen Aktionen, Ausgaben und Veröffentlichungen.
 
+### Dauerbetrieb statt Einmal-Experiment
+
+Die Geschäftsmodellsuche ist nur der Anfang. Das Unternehmen arbeitet danach in **Zyklen ohne festes Ende** weiter.
+Jede Abteilung erledigt in jedem Zyklus ihre wiederkehrende Arbeit:
+
+| Abteilung (Agent) | Laufender Betrieb (alle 14 Tage) |
+|---|---|
+| Analytics (Lens) | Kennzahlen auswerten, Hypothesen prüfen, Experimente vorschlagen |
+| Product (Compass) | Verbesserungen aus Feedback und Zahlen planen |
+| Builder (Forge) | Neue Produktversion bauen |
+| QA (Sentinel) | Neue Version testen, Sicherheit und Compliance prüfen |
+| Marketing (Echo) | Content und Kampagnen planen, Veröffentlichungen beantragen |
+| Sales (Bridge) | Anfragen nachfassen, Einwände auswerten, Akquise verbessern |
+| Operations (Pulse) | Betrieb und Kosten prüfen, Release beantragen |
+| Finance (Ledger) | Monatsabschluss: Ist vs. Prognose, Preis und Kosten |
+| CEO (Atlas) | Ergebnisse prüfen, priorisieren und am Zyklusende entscheiden |
+
+**Zyklusentscheidung → nächster Zyklus (vom Programm automatisch geplant):**
+
+| CEO-Entscheidung | Nächster Zyklus |
+|---|---|
+| `continue` (Nachfrage belegt oder Test noch nicht aussagekräftig) | Laufender Betrieb, 14 Tage |
+| `pivot` (Nische trägt nicht, z. B. viel Reichweite, keine Käufe) | Kurswechsel: Strategy bewertet die vorhandene Recherche ohne die gescheiterte Idee neu, danach Bau, Markttest, Auswertung (30 Tage) |
+| `stop` (Markt insgesamt ungeeignet) | Neue Nische: frische Recherche, alle bisher versuchten Ideen ausgeschlossen (30 Tage) |
+
+Gescheiterte Ideen kommen in eine Sperrliste, die die Auswahlregeln durchsetzen. Lehren und frühere Entscheidungen
+(„Unternehmensgedächtnis“) bekommen alle Agenten als Kontext mit. Messwerte zählen immer nur für den Zyklus, in dem sie
+erhoben wurden. Als Sicherheitsgrenze hält das Unternehmen nach `max_cycles` (Standard 12) an und wartet auf den Eigentümer.
+
 ## 2. Untersuchte Geschäftsmodelle
 
 Der Research-Agent untersucht mindestens fünf Nischen aus diesen Klassen (nur als Ausgangspunkt, nicht als Einschränkung):

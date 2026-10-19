@@ -1,9 +1,23 @@
 # KI-Agenten Unternehmen
 
-Ein autonomes digitales Unternehmen aus **11 spezialisierten KI-Agenten**. Es sucht in einem 30-Tage-Experiment ein
-tragfähiges digitales Geschäftsmodell, baut ein MVP, bereitet den Markttest vor, wertet echte Ergebnisse aus und
-berichtet regelmäßig. Ein **Live-Control-Center** zeigt in Echtzeit, was jeder Agent tut, wer mit wem kommuniziert
-und welche Entscheidungen auf den Eigentümer warten.
+Ein autonomes digitales Unternehmen aus **11 spezialisierten KI-Agenten**: CEO, Research, Strategie, Finanzen,
+Produktmanagement, Entwicklung, QA, Marketing, Vertrieb, Operations und Analytics. Wie in einer echten Firma hat jede
+Abteilung ihre Aufgaben, und die Agenten übergeben sich Ergebnisse, prüfen sich gegenseitig und geben Arbeit zurück.
+Das Unternehmen **läuft dauerhaft in Zyklen**:
+
+1. **Gründung (30 Tage):** Nischen recherchieren, Idee auswählen, Produkt bauen, Markt vorbereiten, testen, auswerten.
+2. **Laufender Betrieb (je 14 Tage):** Produkt verbessern, Content und Kampagnen, Vertrieb, Monatsabschluss, Release.
+3. Am Ende jedes Zyklus entscheidet der CEO anhand echter Zahlen: **weiter**, **Kurswechsel** zur nächstbesten Idee
+   oder **neue Nische** mit frischer Recherche. Gescheiterte Ideen werden gesperrt, Lehren gehen in den nächsten Zyklus ein.
+
+Ein **Live-Control-Center** zeigt in Echtzeit, was jeder Agent tut, wer mit wem kommuniziert und welche Entscheidungen
+auf den Eigentümer warten.
+
+**Am schnellsten ausprobieren:**
+- **Ohne Installation:** die Online-Vorschau (Aufzeichnung eines echten Dry-Runs im Zeitraffer, inkl. Nischenwechsel).
+  Sie wird mit `python scripts/record_preview.py` und `cd frontend && npx vite build --mode preview` erzeugt.
+- **Lokal mit einem Klick:** `./start.sh` (macOS/Linux) bzw. Doppelklick auf `start.bat` (Windows). Voraussetzung ist nur
+  Python 3.11–3.13. Das Skript installiert alles, simuliert einen Zyklus ohne API-Kosten und öffnet das Control-Center.
 
 ![Control-Center](docs/control-center.png)
 

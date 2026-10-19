@@ -72,6 +72,7 @@ class ExperimentConfig(BaseModel):
     clock: Literal["calendar", "accelerated"] = "calendar"
     days_per_run: int = 5
     min_idea_score: float = 55
+    max_cycles: int = Field(12, ge=1)
 
 
 class ApprovalsConfig(BaseModel):

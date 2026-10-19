@@ -9,3 +9,5 @@ workspace/
 frontend/node_modules/
 frontend/test-results/
 frontend/playwright-report/
+frontend/dist-preview/
+frontend/preview/

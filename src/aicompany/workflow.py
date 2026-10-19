@@ -1,4 +1,14 @@
-"""Der 30-tägige Geschäftszyklus: Phasen, Aufgabenvorlagen mit Abhängigkeiten und Meilensteine.
+"""Geschäftszyklen des Unternehmens: Phasen, Aufgabenvorlagen mit Abhängigkeiten und Meilensteine.
+
+Das Unternehmen arbeitet dauerhaft in Zyklen. Am Ende jedes Zyklus entscheidet der CEO anhand
+echter Daten, und das Programm startet automatisch den nächsten Zyklus:
+
+- ``launch``  (30 Tage): Nische recherchieren, Idee auswählen, MVP bauen, Markt vorbereiten, testen, auswerten
+- ``operate`` (14 Tage): laufender Betrieb – Produkt verbessern, Content/Marketing, Vertrieb, Finanzen, Betrieb
+- ``pivot``   (30 Tage): Kurswechsel zur nächstbesten, noch nicht versuchten Idee (ohne neue Grundrecherche)
+
+CEO-Entscheidung → nächster Zyklus: continue → operate, pivot → pivot, stop → launch mit neuer Recherche
+(bereits gescheiterte Nischen werden ausgeschlossen).
 
 Die Verantwortungsmatrix ergibt sich direkt aus den Vorlagen (Spalte `agent`). Unabhängige
 Aufgaben (z. B. MVP-Bau und Positionierung) laufen parallel; abhängige sequenziell.
@@ -27,6 +37,7 @@ PHASES = [
     Phase(number=3, name="Marktvorbereitung", start_day=13, end_day=17, goal="Preis, Landingpage, Vertrieb und Compliance vorbereiten"),
     Phase(number=4, name="Markttest", start_day=18, end_day=26, goal="Nach Freigabe veröffentlichen und reale Daten erfassen"),
     Phase(number=5, name="Auswertung", start_day=27, end_day=30, goal="Über Fortführung, Kurswechsel oder Beendigung entscheiden"),
+    Phase(number=6, name="Laufender Betrieb", start_day=1, end_day=14, goal="Produkt verbessern, vermarkten, verkaufen, auswerten – und dann neu entscheiden"),
 ]
 
 
@@ -123,79 +134,192 @@ TEMPLATES: list[TaskSpec] = [
       deps=["p5.analytics.final", "p5.finance.final"], acceptance=["Entscheidung mit Begründung"], priority=60, not_before_day=27),
 ]
 
-MILESTONES = [
-    ("M1", 1, "Geschäftsidee ausgewählt", ["p1.ceo.select_idea"]),
-    ("M2", 2, "MVP gebaut und von QA bestätigt", ["p2.qa.product_test"]),
-    ("M3", 3, "Marktvorbereitung abgeschlossen", ["p3.ops.launch_prep"]),
-    ("M4", 4, "Markttest ausgewertet", ["p4.analytics.midtest"]),
-    ("M5", 5, "Abschlussentscheidung getroffen", ["p5.ceo.final_decision"]),
+# Laufender Betrieb: jede Abteilung erledigt ihre wiederkehrende Arbeit, danach entscheidet der CEO neu
+OPERATE_TEMPLATES: list[TaskSpec] = [
+    T("o.analytics.review", "analytics", "analytics_review", 6, "Kennzahlen der letzten Wochen auswerten",
+      "Besucher, Anfragen, Verkäufe und Umsatz mit den Zielen vergleichen; Schwachstellen und nächste Experimente benennen",
+      "Nur echte Messwerte; ohne Daten klar 'keine Daten' melden.", acceptance=["keine erfundenen Kennzahlen"], priority=80),
+    T("o.product.improvements", "product", "mvp_spec", 6, "Produktverbesserungen planen",
+      "Aus Feedback und Kennzahlen die wichtigsten Verbesserungen für die nächste Produktversion festlegen",
+      "Maximal 5 must-Punkte; Wirkung auf Umsatz/Conversion begründen.", deps=["o.analytics.review"],
+      acceptance=["≥ 1 must-Feature mit Akzeptanzkriterien"], priority=70, review_by="ceo"),
+    T("o.builder.update", "builder", "build", 6, "Neue Produktversion bauen",
+      "Die geplanten Verbesserungen im Produkt umsetzen", "Nur erlaubte Dateitypen, keine externen Skripte.",
+      deps=["o.product.improvements"], acceptance=["index.html vorhanden", "statische Prüfungen bestanden"], priority=65,
+      target_dir="product"),
+    T("o.qa.update_test", "qa", "qa_review", 6, "Neue Produktversion testen",
+      "Verbesserungen gegen Akzeptanzkriterien prüfen, Regressionen und Sicherheitsprobleme finden", "",
+      deps=["o.builder.update"], acceptance=["Urteil pass oder pass_with_issues"], priority=65, review_target="o.builder.update"),
+    T("o.marketing.content", "marketing", "experiment_plan", 6, "Content und Kampagnen planen",
+      "Inhalte und Experimente für die nächsten zwei Wochen erstellen; Veröffentlichungen beantragen",
+      "Keine unbelegten Versprechen; jede Veröffentlichung nur als Freigabeantrag.", deps=["o.analytics.review"],
+      acceptance=["≥ 1 Experiment mit Mindeststichprobe"], priority=60),
+    T("o.sales.pipeline", "sales", "sales_plan", 6, "Vertrieb und Kundenanfragen bearbeiten",
+      "Anfragen nachfassen, Einwände auswerten, Akquiseweg verbessern", "Kontakt nur mit Rechtsgrundlage.",
+      deps=["o.analytics.review", "o.marketing.content"], acceptance=["Leadquellen mit Rechtsgrundlage", "KPIs"], priority=60),
+    T("o.ops.release", "operations", "ops_plan", 6, "Betrieb prüfen und Release vorbereiten",
+      "Abläufe, Monitoring und Kosten prüfen; Veröffentlichung der neuen Version beantragen", "Externe Aktionen nur als Antrag.",
+      deps=["o.qa.update_test"], acceptance=["Runbook"], priority=55, target_dir="product"),
+    T("o.finance.review", "finance", "finance_assessment", 6, "Monatsabschluss und Prognose",
+      "Ist-Zahlen mit der Prognose abgleichen, Preis und Kosten überprüfen", "Ist und Prognose klar trennen.",
+      deps=["o.analytics.review"], acceptance=["Abgleich Ist vs. Prognose"], priority=55, not_before_day=10),
+    T("o.ceo.decision", "ceo", "final_decision", 6, "Zyklusentscheidung: weiter, Kurswechsel oder neue Nische",
+      "Auf Basis von Analytics, Finanzen, Produkt und Vertrieb über den nächsten Zyklus entscheiden", "Begründung mit Kriterien.",
+      deps=["o.finance.review", "o.ops.release", "o.sales.pipeline"], acceptance=["Entscheidung mit Begründung"], priority=60,
+      not_before_day=14),
 ]
 
+CYCLE_TYPES = {
+    "launch": {"label": "Gründung / neue Nische", "days": 30, "phases": [1, 2, 3, 4, 5]},
+    "pivot": {"label": "Kurswechsel zur nächsten Idee", "days": 30, "phases": [1, 2, 3, 4, 5]},
+    "operate": {"label": "Laufender Betrieb", "days": 14, "phases": [6]},
+}
+NEXT_CYCLE = {"continue": "operate", "pivot": "pivot", "stop": "launch"}
 
-def seed(tasks: TaskStore, run_id: str | None = None) -> int:
+MILESTONES = {
+    "launch": [
+        ("M1", 1, "Geschäftsidee ausgewählt", ["p1.ceo.select_idea"]),
+        ("M2", 2, "MVP gebaut und von QA bestätigt", ["p2.qa.product_test"]),
+        ("M3", 3, "Marktvorbereitung abgeschlossen", ["p3.ops.launch_prep"]),
+        ("M4", 4, "Markttest ausgewertet", ["p4.analytics.midtest"]),
+        ("M5", 5, "Zyklusentscheidung getroffen", ["p5.ceo.final_decision"]),
+    ],
+    "operate": [
+        ("B1", 6, "Kennzahlen ausgewertet", ["o.analytics.review"]),
+        ("B2", 6, "Neue Produktversion getestet", ["o.qa.update_test"]),
+        ("B3", 6, "Marketing und Vertrieb geplant", ["o.marketing.content", "o.sales.pipeline"]),
+        ("B4", 6, "Zyklusentscheidung getroffen", ["o.ceo.decision"]),
+    ],
+}
+MILESTONES["pivot"] = MILESTONES["launch"]
+FINAL_TASK = {"launch": "p5.ceo.final_decision", "pivot": "p5.ceo.final_decision", "operate": "o.ceo.decision"}
+
+
+def cycle_key(key: str, cycle: int) -> str:
+    """Zyklus 1 nutzt die Basis-Keys, spätere Zyklen ein Präfix (Duplikatschutz je Zyklus)."""
+    return key if cycle <= 1 else f"c{cycle}.{key}"
+
+
+def templates_for(cycle_type: str) -> list[TaskSpec]:
+    if cycle_type == "operate":
+        return OPERATE_TEMPLATES
+    if cycle_type == "pivot":  # keine neue Grundrecherche: Strategy bewertet die vorhandene Recherche neu
+        out = []
+        for spec in TEMPLATES:
+            if spec.key == "p1.research.opportunities":
+                continue
+            if spec.key == "p1.strategy.evaluate":
+                spec = spec.model_copy(update={"depends_on": [], "title": "Nächstbeste Idee neu bewerten (Kurswechsel)",
+                                               "description": spec.description + " Bereits versuchte Ideen sind ausgeschlossen."})
+            out.append(spec)
+        return out
+    return TEMPLATES
+
+
+def seed(tasks: TaskStore, run_id: str | None = None, *, cycle: int = 1, cycle_type: str = "launch",
+         extra_inputs: dict | None = None) -> int:
     created = 0
-    for spec in TEMPLATES:
-        _, new = tasks.create(spec, run_id=run_id)
+    for spec in templates_for(cycle_type):
+        inputs = {**spec.inputs, **(extra_inputs or {}), "cycle_type": cycle_type}
+        if "review_target" in inputs:
+            inputs["review_target"] = cycle_key(inputs["review_target"], cycle)
+        s = spec.model_copy(update={
+            "key": cycle_key(spec.key, cycle), "depends_on": [cycle_key(d, cycle) for d in spec.depends_on],
+            "inputs": inputs, "cycle": cycle,
+        })
+        _, new = tasks.create(s, run_id=run_id)
         created += int(new)
     return created
 
 
 class ExperimentClock:
-    """Tag des 30-Tage-Experiments. Kalender: echte Tage seit Start. Beschleunigt: pro Lauf N Tage."""
+    """Tag innerhalb des aktuellen Zyklus. Kalender: echte Tage seit Zyklusstart. Beschleunigt: pro Lauf N Tage."""
 
     def __init__(self, db: Database, *, mode: str, days: int, days_per_run: int):
-        self.db, self.mode, self.days, self.days_per_run = db, mode, days, days_per_run
+        self.db, self.mode, self.default_days, self.days_per_run = db, mode, days, days_per_run
+
+    @property
+    def days(self) -> int:
+        return CYCLE_TYPES[self.db.get_meta("cycle_type", "launch") or "launch"]["days"]
 
     def start(self) -> None:
         if not self.db.get_meta("experiment_start"):
             self.db.set_meta("experiment_start", date.today().isoformat())
-            self.db.set_meta("experiment_runs", "0")
+            self.start_cycle(1, "launch", runs=0)
+
+    def start_cycle(self, cycle: int, cycle_type: str, *, runs: int = 1) -> None:
+        self.db.set_meta("cycle", str(cycle))
+        self.db.set_meta("cycle_type", cycle_type)
+        self.db.set_meta("cycle_start", date.today().isoformat())
+        self.db.set_meta("cycle_runs", str(runs))
 
     def started(self) -> bool:
         return self.db.get_meta("experiment_start") is not None
 
+    def cycle(self) -> int:
+        return int(self.db.get_meta("cycle", "1") or 1)
+
+    def cycle_type(self) -> str:
+        return self.db.get_meta("cycle_type", "launch") or "launch"
+
     def advance_run(self) -> None:
-        self.db.set_meta("experiment_runs", str(int(self.db.get_meta("experiment_runs", "0") or 0) + 1))
+        self.db.set_meta("cycle_runs", str(int(self.db.get_meta("cycle_runs", "0") or 0) + 1))
 
     def day(self) -> int:
-        start = self.db.get_meta("experiment_start")
+        start = self.db.get_meta("cycle_start")
         if not start:
             return 0
         if self.mode == "accelerated":
-            runs = int(self.db.get_meta("experiment_runs", "0") or 0)
+            runs = int(self.db.get_meta("cycle_runs", "0") or 0)
             return min(self.days, 1 + max(0, runs - 1) * self.days_per_run)
         delta = (datetime.now(timezone.utc).date() - date.fromisoformat(start)).days
         return min(self.days, delta + 1)
 
+    def company_day(self) -> int:
+        """Tage seit Gründung (über alle Zyklen)."""
+        start = self.db.get_meta("experiment_start")
+        if not start:
+            return 0
+        return (datetime.now(timezone.utc).date() - date.fromisoformat(start)).days + 1
 
-def phase_for_day(day: int) -> Phase:
-    for p in PHASES:
+
+PHASE_BY_NUMBER = {p.number: p for p in PHASES}
+
+
+def phases_for(cycle_type: str) -> list[Phase]:
+    return [PHASE_BY_NUMBER[n] for n in CYCLE_TYPES[cycle_type]["phases"]]
+
+
+def phase_for_day(day: int, cycle_type: str = "launch") -> Phase:
+    phases = phases_for(cycle_type)
+    for p in phases:
         if p.start_day <= day <= p.end_day:
             return p
-    return PHASES[0] if day < 1 else PHASES[-1]
+    return phases[0] if day < 1 else phases[-1]
 
 
-def work_phase(tasks: list) -> Phase:
-    """Tatsächliche Arbeitsphase: die niedrigste Phase mit unerledigten Aufgaben."""
+def work_phase(tasks: list, cycle_type: str = "launch") -> Phase:
+    """Tatsächliche Arbeitsphase: die niedrigste Phase mit unerledigten Aufgaben im aktuellen Zyklus."""
     open_phases = [t.phase for t in tasks if t.status != TaskStatus.COMPLETED]
     if not open_phases:
-        return PHASES[-1]
-    return PHASES[min(open_phases) - 1]
+        return phases_for(cycle_type)[-1]
+    return PHASE_BY_NUMBER[min(open_phases)]
 
 
-def milestones(tasks_by_key: dict) -> list[dict]:
+def milestones(tasks_by_key: dict, cycle: int = 1, cycle_type: str = "launch") -> list[dict]:
     out = []
-    for mid, phase, title, keys in MILESTONES:
-        ts = [tasks_by_key.get(k) for k in keys]
+    for mid, phase, title, keys in MILESTONES[cycle_type]:
+        ckeys = [cycle_key(k, cycle) for k in keys]
+        ts = [tasks_by_key.get(k) for k in ckeys]
         done = all(t is not None and t.status == TaskStatus.COMPLETED for t in ts)
         out.append({"id": mid, "phase": phase, "title": title, "achieved": done,
-                    "achieved_at": max((t.completed_at or "") for t in ts) if done else None, "tasks": keys})
+                    "achieved_at": max((t.completed_at or "") for t in ts) if done else None, "tasks": ckeys})
     return out
 
 
 def progress(tasks: list) -> dict:
-    """Fortschritt = abgeschlossene Workflow-Aufgaben / alle Workflow-Aufgaben (nachvollziehbar berechnet)."""
+    """Fortschritt = abgeschlossene Aufgaben des aktuellen Zyklus / alle Aufgaben des aktuellen Zyklus."""
     total = len(tasks)
     done = sum(1 for t in tasks if t.status == TaskStatus.COMPLETED)
     return {"completed": done, "total": total, "percent": round(done / total * 100, 1) if total else None,
-            "formula": "abgeschlossene Aufgaben / alle Aufgaben des Geschäftszyklus"}
+            "formula": "abgeschlossene Aufgaben / alle Aufgaben des aktuellen Zyklus"}

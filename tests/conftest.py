@@ -40,11 +40,12 @@ def run(company, n=1):
     return out
 
 
-def run_until_finished(company, max_runs=12):
+def run_until_finished(company, max_runs=12, cycle=1):
+    """Läuft, bis der angegebene Zyklus mit einer CEO-Zyklusentscheidung abgeschlossen ist."""
     summaries = []
     for _ in range(max_runs):
         s = run(company)
         summaries.append(s)
-        if company.db.get_meta("experiment_status") == "finished" or s.status != "completed":
+        if company.clock.cycle() > cycle or company.db.get_meta("experiment_status") == "finished" or s.status != "completed":
             break
     return summaries

@@ -8,6 +8,8 @@ import { CompanyMap } from "./components/CompanyMap";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { SidePanel } from "./components/SidePanel";
 import { BottomTabs } from "./components/BottomTabs";
+import { ReplayBar } from "./components/ReplayBar";
+import { ReplayApi, type ApiLike, type ReplayEngine } from "./replay";
 
 function Login({ onToken }: { onToken: (t: string) => void }) {
   const [value, setValue] = useState("");
@@ -26,14 +28,14 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
   );
 }
 
-export default function App() {
-  const [token, setToken] = useState<string | null>(() => readToken());
+export default function App({ replay }: { replay?: ReplayEngine }) {
+  const [token, setToken] = useState<string | null>(() => (replay ? "vorschau" : readToken()));
   const [state, dispatch] = useReducer(reducer, initialState);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; kind: string }[]>([]);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => (replay ? replay.now() : Date.now()));
   const live = useRef<LiveConnection | null>(null);
-  const api = useMemo(() => (token ? new Api(token) : null), [token]);
+  const api: ApiLike | null = useMemo(() => (replay ? new ReplayApi(replay) : token ? new Api(token) : null), [token, replay]);
 
   useEffect(() => {
     // Token kann auch nachträglich per Link (#token=…) übergeben werden
@@ -43,13 +45,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (replay) return replay.subscribe(() => setNow(replay.now()));  // virtuelle Uhr der Aufzeichnung
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [replay]);
 
   useEffect(() => {
     if (!api) return;
-    const conn = new LiveConnection({ api, dispatch });
+    const conn = new LiveConnection(api instanceof ReplayApi
+      ? { api, dispatch, makeEventSource: api.makeEventSource, pollMs: 1000, refreshDebounceMs: 150 }
+      : { api, dispatch });
     live.current = conn;
     void conn.start();
     return () => conn.stop();
@@ -69,12 +74,15 @@ export default function App() {
 
   if (!token || !api) return <Login onToken={(t) => { saveToken(t); setToken(t); }} />;
 
-  const ctx = { api, state, refresh, open: setPanel, toast, now };
+  const ctx = { api, state, refresh, open: setPanel, toast, now, replay: !!replay };
   const snap = state.snapshot;
   return (
     <AppContext.Provider value={ctx}>
       <div className="app">
-        {snap?.simulated && (
+        {replay ? (
+          <div className="demo-banner" role="status">VORSCHAU – Aufzeichnung eines echten Dry-Runs im Zeitraffer. Agentenantworten sind simuliert,
+            Eigentümer-Entscheidungen und Kennzahlen sind DEMO-Werte. Buttons sind hier deaktiviert.</div>
+        ) : snap?.simulated && (
           <div className="demo-banner" role="status">DRY-RUN / DEMO-MODUS – alle Agentenantworten und Kosten sind simuliert. Es finden keine echten API-Aufrufe statt.</div>
         )}
         <Header />
@@ -90,6 +98,7 @@ export default function App() {
           </>
         )}
         {panel && <SidePanel panel={panel} onClose={() => setPanel(null)} />}
+        {replay && <ReplayBar engine={replay} />}
         <div className="toasts" aria-live="polite">
           {toasts.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.msg}</div>)}
         </div>

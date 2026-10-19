@@ -7,12 +7,13 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 
 | Suite | Befehl | Ergebnis |
 |---|---|---|
-| Backend (pytest) | `python -m pytest` | **110 bestanden**, 0 fehlgeschlagen (≈ 52 s) |
+| Backend (pytest) | `python -m pytest` | **117 bestanden**, 0 fehlgeschlagen (≈ 85 s) |
 | Selbsttest (Live-Gate) | `aicompany selftest` | **bestanden**, Marker für den aktuellen Codestand geschrieben |
 | Frontend-Logik (Vitest) | `cd frontend && npm test` | **14 bestanden** |
 | Typecheck + Build | `npm run build` | erfolgreich (`tsc --noEmit`, Vite-Build) |
 | End-to-End im Browser (Playwright) | `npx playwright test` | **2 bestanden** (echtes Backend im Dry-Run, Chromium) |
-| Vollständiger Dry-Run | `aicompany demo` | 7 Läufe, Tag 1 → 30, alle 20 Workflow-Aufgaben abgeschlossen, 3 Freigabeanträge offen (siehe `examples/dry_run_example.md`) |
+| Vollständiger Dry-Run | `aicompany demo --cycles 2` | Gründungszyklus (Tag 1 → 30) und anschließender Betriebszyklus laufen automatisch durch |
+| Nischenwechsel | `scripts/record_preview.py` | Mit DEMO-Kennzahlen (420 Besucher, 0 Verkäufe) entscheidet der CEO „Kurswechsel“; Zyklus 2 wählt automatisch die nächstbeste Idee |
 | Live-Preflight | `aicompany preflight` | ohne Schlüssel korrekt gesperrt; mit (Dummy-)Schlüssel und bestandenem Selbsttest „startbereit“ |
 
 ## Abdeckung der geforderten Testbereiche
@@ -24,6 +25,7 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 | Wiederaufnahme nach Neustart | `test_resume_after_crash`, `test_recover_stale_tasks`, `test_events_survive_restart` |
 | API-Ausfälle | `test_transient_api_errors_are_retried`, `test_api_outage_stops_run_and_keeps_task`, `test_openai_backend_maps_errors` |
 | Ungültige Agentenausgaben | `test_invalid_output_goes_to_revision`, `test_semantically_invalid_output_rejected`, `test_fabricated_metrics_rejected`, `test_invalid_output_rejected_by_schema` |
+| Dauerbetrieb und Nischenwechsel | `test_cycles.py`: weiter → Betriebszyklus mit allen Abteilungen, Kurswechsel nach Fehlschlag, neue Nische mit Ausschlussliste, Sperre bereits versuchter Ideen, `max_cycles`, Unternehmensgedächtnis im Agentenkontext, Messwerte pro Zyklus |
 | Überarbeitungslimits / keine Endlosschleifen | `test_revision_limit_fails_and_blocks_dependents`, `test_followup_limit_prevents_loops`, `test_selection_rules_override_ceo`, `test_scheduler_is_bounded` |
 | Berechtigungen | `test_security.py` (Sandbox, Ordnerrechte, Symlinks, Werkzeuge, Default-Deny), `test_ceo_cannot_execute_specialist_task`, `test_build_path_traversal_rejected`, `test_no_dangerous_tools_given` |
 | Freigaben für externe Aktionen | `test_approvals.py` (15 Tests: verbotene/unbekannte Aktionen, Massenkommunikation, Hash-Bindung, Manipulation, Ablauf, Budget, manuelle Bestätigung, Pausensperre), `test_approval_flow_via_api`, E2E-Genehmigung |
@@ -46,6 +48,9 @@ Alle Tests laufen ohne API-Schlüssel und ohne API-Kosten (Dry-Run- bzw. Attrapp
 3. **Pfadprüfung nach Typprüfung**: Ein `../escape.sh` wurde nur als „falscher Dateityp“ statt als Sicherheitsverstoß gemeldet. Die Pfadprüfung läuft jetzt zuerst.
 4. **Live-Aktualisierung im Browser**: `setTimeout` wurde mit fremdem `this` aufgerufen („Illegal invocation“). Der Fehler wurde verschluckt, und der Snapshot aktualisierte sich nur alle 10 s. Gefunden durch den E2E-Test; behoben mit Wrapper-Funktionen und einer Sequenzprüfung gegen veraltete Antworten.
 5. **Token per Link bei bereits geöffneter Seite** wurde ignoriert. Behoben durch `hashchange`-Listener.
+6. **Doppelte Lauf-IDs** bei sehr schnell aufeinanderfolgenden Läufen (4 Hex-Zeichen pro Sekunde). Jetzt 8 Hex-Zeichen.
+7. **Meilenstein des beendeten Zyklus fehlte**, weil die Abschlussentscheidung den neuen Zyklus startet, bevor die Meilensteine geprüft werden. Jetzt wird der gerade beendete Zyklus mitgeprüft.
+8. **Status „versucht“ ging verloren**, wenn im neuen Zyklus eine Idee ausgewählt wurde. Behoben.
 
 ## Was fehlt / bekannte Grenzen
 

@@ -52,6 +52,7 @@ class TaskSpec(BaseModel):
     not_before_day: int = 1
     created_by: str = "system"
     parent_task_id: str | None = None
+    cycle: int = 1
 
 
 class Task(BaseModel):
@@ -63,6 +64,7 @@ class Task(BaseModel):
     goal: str
     description: str
     phase: int
+    cycle: int = 1
     inputs: dict[str, Any]
     depends_on: list[str]
     output_format: str
@@ -115,10 +117,10 @@ class TaskStore:
             cur = conn.execute(
                 "INSERT OR IGNORE INTO tasks(id, key, agent, kind, title, goal, description, phase, inputs, depends_on,"
                 " output_format, acceptance, priority, status, review_by, not_before_day, history, created_by,"
-                " parent_task_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " parent_task_id, created_at, updated_at, cycle) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (task_id, spec.key, spec.agent, spec.kind, spec.title, spec.goal, spec.description, spec.phase,
                  dumps(spec.inputs), dumps(spec.depends_on), spec.output_format, dumps(spec.acceptance), spec.priority,
-                 "pending", spec.review_by, spec.not_before_day, dumps(history), spec.created_by, spec.parent_task_id, ts, ts),
+                 "pending", spec.review_by, spec.not_before_day, dumps(history), spec.created_by, spec.parent_task_id, ts, ts, spec.cycle),
             )
             if cur.rowcount != 1:  # paralleles Anlegen desselben Keys
                 return self.get_by_key(spec.key), False  # type: ignore[return-value]
@@ -138,8 +140,11 @@ class TaskStore:
         row = self.db.query_one("SELECT * FROM tasks WHERE key = ?", (key,))
         return row_to_task(row) if row else None
 
-    def list(self, *, agent: str | None = None, status: str | None = None) -> list[Task]:
+    def list(self, *, agent: str | None = None, status: str | None = None, cycle: int | None = None) -> list[Task]:
         sql, params = "SELECT * FROM tasks WHERE 1=1", []
+        if cycle is not None:
+            sql += " AND cycle = ?"
+            params.append(cycle)
         if agent:
             sql += " AND agent = ?"
             params.append(agent)
@@ -155,11 +160,11 @@ class TaskStore:
     def dependencies_met(self, task: Task, by_key: dict[str, Task]) -> bool:
         return all(dep in by_key and by_key[dep].status == S.COMPLETED for dep in task.depends_on)
 
-    def ready(self, *, current_day: int, paused_agents: set[str]) -> list[Task]:
+    def ready(self, *, current_day: int, paused_agents: set[str], cycle: int | None = None) -> list[Task]:
         by_key = self.by_keys()
         ready = [
             t for t in by_key.values()
-            if t.status == S.PENDING and t.agent not in paused_agents and t.not_before_day <= current_day
+            if t.status == S.PENDING and (cycle is None or t.cycle == cycle) and t.agent not in paused_agents and t.not_before_day <= current_day
             and self.dependencies_met(t, by_key)
         ]
         return sorted(ready, key=lambda t: (t.phase, -t.priority, t.created_at))

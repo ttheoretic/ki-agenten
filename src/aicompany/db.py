@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   goal TEXT NOT NULL,
   description TEXT NOT NULL,
   phase INTEGER NOT NULL,
+  cycle INTEGER NOT NULL DEFAULT 1,
   inputs TEXT NOT NULL DEFAULT '{}',
   depends_on TEXT NOT NULL DEFAULT '[]',
   output_format TEXT NOT NULL,
@@ -194,6 +195,9 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(tasks)")}
+            if "cycle" not in cols:  # Migration älterer Datenbanken
+                conn.execute("ALTER TABLE tasks ADD COLUMN cycle INTEGER NOT NULL DEFAULT 1")
             conn.execute(
                 "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),)
             )

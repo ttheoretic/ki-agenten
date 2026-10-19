@@ -95,6 +95,9 @@ days = 30
 clock = "calendar"
 days_per_run = 5
 min_idea_score = 55              # Mindestpunktzahl für die Auswahl einer Idee
+# Das Unternehmen läuft dauerhaft in Zyklen weiter (Gründung 30 Tage, Betrieb je 14 Tage, Kurswechsel 30 Tage).
+# Sicherheitsgrenze: nach so vielen Zyklen hält es an und wartet auf den Eigentümer.
+max_cycles = 12
 
 [approvals]
 default_expiry_hours = 168

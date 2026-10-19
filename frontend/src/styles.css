@@ -247,3 +247,16 @@ details summary { cursor: pointer; color: #c7d0e8; margin: 4px 0; }
   .node-title, .node-task, .node-foot { display: none; }
   .node-status { font-size: 10px; }
 }
+
+.cycles { list-style: none; padding: 0; margin: 0 0 6px; }
+.cycles li { background: var(--panel2); border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; border-left: 3px solid var(--line); font-size: 13px; }
+.cycles li.current { border-left-color: var(--accent); }
+
+.replay-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 40;
+  display: flex; align-items: center; gap: 10px; background: #0f1730f2; border: 1px solid #3b4b77; border-radius: 12px; padding: 8px 12px;
+  box-shadow: 0 10px 30px #000a; width: min(720px, calc(100vw - 32px)); flex-wrap: wrap; }
+.replay-bar input[type=range] { flex: 1 1 200px; accent-color: var(--accent); padding: 0; }
+.replay-time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.speeds { display: flex; gap: 4px; }
+.speeds .btn { padding: 4px 8px; }
+body:has(.replay-bar) .bottom { margin-bottom: 90px; }

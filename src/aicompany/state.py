@@ -10,7 +10,7 @@ from .db import loads
 from .events import COMM_TYPES
 from .preflight import selftest_status
 from .tasks import Task, TaskStatus
-from .workflow import PHASES, milestones, phase_for_day, progress, work_phase
+from .workflow import CYCLE_TYPES, FINAL_TASK, cycle_key, milestones, phase_for_day, phases_for, progress, work_phase
 
 TS = TaskStatus
 
@@ -22,7 +22,7 @@ STATUS_LABELS = {
 
 
 def task_brief(t: Task) -> dict:
-    return {"id": t.id, "key": t.key, "title": t.title, "agent": t.agent, "kind": t.kind, "phase": t.phase, "status": t.status.value,
+    return {"id": t.id, "key": t.key, "title": t.title, "agent": t.agent, "kind": t.kind, "phase": t.phase, "cycle": t.cycle, "status": t.status.value,
             "priority": t.priority, "revision_count": t.revision_count, "depends_on": t.depends_on, "review_by": t.review_by,
             "not_before_day": t.not_before_day, "error": t.error, "est_cost_eur": round(t.est_cost_eur, 5),
             "actual_cost_eur": round(t.actual_cost_eur, 5), "artifacts": t.artifacts, "updated_at": t.updated_at,
@@ -79,7 +79,9 @@ def active_run(company: Company) -> dict | None:
 
 
 def agents_overview(company: Company, tasks: list[Task] | None = None) -> list[dict]:
-    tasks = tasks if tasks is not None else company.tasks.list()
+    # Status und Fortschritt beziehen sich auf den aktuellen Zyklus; Verlauf und Kosten auf alle Zyklen
+    cycle = company.clock.cycle()
+    tasks = [t for t in (tasks if tasks is not None else company.tasks.list()) if t.cycle == cycle]
     by_key = {t.key: t for t in tasks}
     paused = company.control.paused_agents()
     approvals = company.approvals.list("open")
@@ -125,7 +127,8 @@ def agents_overview(company: Company, tasks: list[Task] | None = None) -> list[d
 def company_snapshot(company: Company) -> dict:
     s = company.settings
     tasks = [t for t in company.tasks.list()]
-    workflow_tasks = [t for t in tasks if not t.key.startswith("ceo.review.")]
+    cycle, ctype = company.clock.cycle(), company.clock.cycle_type()
+    workflow_tasks = [t for t in tasks if t.cycle == cycle and not t.key.startswith(("ceo.review.", "followup."))]
     by_key = {t.key: t for t in tasks}
     day = company.clock.day()
     selected = company.db.get_meta("selected_idea")
@@ -142,7 +145,8 @@ def company_snapshot(company: Company) -> dict:
                                   "suggested_fix": i["suggested_fix"]})
     blockers = [{"task_id": t.id, "title": t.title, "status": t.status.value, "error": t.error, "agent": t.agent}
                 for t in tasks if t.status in (TS.FAILED, TS.BLOCKED)]
-    wphase = work_phase(workflow_tasks) if workflow_tasks else PHASES[0]
+    wphase = work_phase(workflow_tasks, ctype) if workflow_tasks else phases_for(ctype)[0]
+    final_key = cycle_key(FINAL_TASK[ctype], cycle)
     next_decision = None
     if any(t.status == TS.REVIEW and t.review_by == "ceo" for t in tasks):
         next_decision = "CEO-Review vorgelegter Ergebnisse"
@@ -150,8 +154,8 @@ def company_snapshot(company: Company) -> dict:
         next_decision = "Auswahl der Geschäftsidee (Meilenstein M1)"
     elif company.approvals.list("open"):
         next_decision = "Offene Freigaben des Eigentümers"
-    elif by_key.get("p5.ceo.final_decision") and by_key["p5.ceo.final_decision"].status != TS.COMPLETED:
-        next_decision = "Abschlussentscheidung (Tag 27–30)"
+    elif by_key.get(final_key) and by_key[final_key].status != TS.COMPLETED:
+        next_decision = f"Zyklusentscheidung: weiter, Kurswechsel oder neue Nische (ab Tag {by_key[final_key].not_before_day})"
     budget = company.budget.summary()
     run = active_run(company)
     last_run = company.db.query_one("SELECT * FROM runs ORDER BY started_at DESC LIMIT 1")
@@ -173,16 +177,21 @@ def company_snapshot(company: Company) -> dict:
         "mode": s.mode, "mode_label": company.mode_label(), "simulated": s.mode == "dry_run",
         "company": {"name": s.company.name, "goal": s.company.goal, "status": status, "control": company.control.flags()},
         "experiment": {
-            "started": company.clock.started(), "start_date": company.db.get_meta("experiment_start"), "day": day, "days": s.experiment.days,
-            "clock": s.experiment.clock, "plan_phase": phase_for_day(day).model_dump() if day else None,
-            "work_phase": wphase.model_dump(), "phases": [p.model_dump() for p in PHASES],
+            "started": company.clock.started(), "start_date": company.db.get_meta("experiment_start"), "day": day,
+            "days": company.clock.days, "clock": s.experiment.clock,
+            "plan_phase": phase_for_day(day, ctype).model_dump() if day else None,
+            "work_phase": wphase.model_dump(), "phases": [p.model_dump() for p in phases_for(ctype)],
             "status": company.db.get_meta("experiment_status", "running" if company.clock.started() else "not_started"),
             "final_decision": company.db.get_meta("final_decision"),
+            "cycle": cycle, "cycle_type": ctype, "cycle_label": CYCLE_TYPES[ctype]["label"], "max_cycles": s.experiment.max_cycles,
+            "company_day": company.clock.company_day(),
+            "cycles": json.loads(company.db.get_meta("cycles", "[]") or "[]"),
+            "tried_ideas": json.loads(company.db.get_meta("tried_ideas", "[]") or "[]"),
         },
         "selected_idea": json.loads(selected) if selected else None,
         "ideas": [dict(r) | {"data": loads(r["data"], {})} for r in company.db.query("SELECT * FROM ideas ORDER BY score DESC")],
         "progress": progress(workflow_tasks),
-        "milestones": milestones(by_key),
+        "milestones": milestones(by_key, cycle, ctype),
         "budget": budget,
         "finance_actuals": {"revenue_eur": float(revenue["s"]) if revenue["n"] else None, "expenses_eur": budget["total_spent_eur"],
                             "has_revenue_data": bool(revenue["n"])},
@@ -191,7 +200,8 @@ def company_snapshot(company: Company) -> dict:
         "blockers": blockers,
         "next_decision": next_decision,
         "ceo_next_step": company.db.get_meta("ceo_next_step"),
-        "next_steps": [task_brief(t) for t in company.tasks.ready(current_day=max(day, 1), paused_agents=company.control.paused_agents())][:6],
+        "next_steps": [task_brief(t) for t in company.tasks.ready(current_day=max(day, 1), paused_agents=company.control.paused_agents(),
+                                                                   cycle=cycle)][:6],
         "decisions": decisions,
         "last_report": dict(last_report) if last_report else None,
         "active_run": run,

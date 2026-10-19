@@ -91,9 +91,13 @@ def check_selection(
     finance: FinanceAssessment | None,
     qa: QAReview | None,
     min_score: float,
+    excluded: list[str] | None = None,
 ) -> SelectionCheck:
     """Harte Auswahlregeln, die das Programm unabhängig von der CEO-Antwort durchsetzt."""
     reasons: list[str] = []
+    if idea_id in (excluded or []):
+        return SelectionCheck(allowed=False, scorecard=None,
+                              reasons=[f"Idee '{idea_id}' wurde bereits versucht und ist gescheitert – bitte eine andere wählen"])
     card = next((s for s in scorecards if s.idea_id == idea_id), None)
     if card is None:
         return SelectionCheck(allowed=False, reasons=[f"Idee '{idea_id}' ist nicht bewertet worden"], scorecard=None)

@@ -8,7 +8,7 @@ export type TaskStatus = "pending" | "in_progress" | "review" | "blocked" | "com
 
 export interface TaskBrief {
   id: string; key: string; title: string; agent: string; kind: string; phase: number; status: TaskStatus;
-  priority: number; revision_count: number; depends_on: string[]; review_by: string | null; not_before_day: number;
+  cycle: number; priority: number; revision_count: number; depends_on: string[]; review_by: string | null; not_before_day: number;
   error: string | null; est_cost_eur: number; actual_cost_eur: number; artifacts: string[]; updated_at: string;
   started_at: string | null; completed_at: string | null; created_by: string;
 }
@@ -50,7 +50,11 @@ export interface Snapshot {
   mode: string; mode_label: string; simulated: boolean;
   company: { name: string; goal: string; status: string; control: Record<string, boolean> };
   experiment: { started: boolean; start_date: string | null; day: number; days: number; clock: string; plan_phase: Phase | null;
-    work_phase: Phase; phases: Phase[]; status: string; final_decision: string | null };
+    work_phase: Phase; phases: Phase[]; status: string; final_decision: string | null;
+    cycle: number; cycle_type: string; cycle_label: string; max_cycles: number; company_day: number;
+    cycles: { cycle: number; type: string; label: string; started_at: string; ended_at: string | null; idea: string | null;
+      decision: string | null; reason: string | null; rationale?: string }[];
+    tried_ideas: string[] };
   selected_idea: { id: string; name: string; score: number; rationale: string; selected_at: string } | null;
   ideas: { id: string; name: string; score: number; status: string; data: { lines?: { label: string; points: number; weight: number; rating: number; evidence: string }[] } }[];
   progress: { completed: number; total: number; percent: number | null; formula: string };

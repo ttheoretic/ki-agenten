@@ -18,8 +18,8 @@ def statuses(c):
 
 def test_full_dry_run_cycle_completes(company):
     summaries = run_until_finished(company)
-    assert company.db.get_meta("experiment_status") == "finished"
-    st = statuses(company)
+    assert company.clock.cycle() == 2  # das Unternehmen läuft weiter: nächster Zyklus automatisch geplant
+    st = {t.key: t.status for t in company.tasks.list(cycle=1)}
     assert all(v == TS.COMPLETED for v in st.values()), st
     assert all(s.agent_calls <= 20 for s in summaries)
     # Idee anhand dokumentierter Kriterien ausgewählt
@@ -34,13 +34,14 @@ def test_full_dry_run_cycle_completes(company):
     assert {(e.from_agent, e.to_agent) for e in fb} >= {("qa", "builder"), ("ceo", "marketing")}
     # Externe Aktionen nur als Freigabeantrag
     aps = company.approvals.list()
+    aps = [a for a in aps if company.tasks.get(a.task_id).cycle == 1]
     assert {a.action_type for a in aps} == {"publish_website", "publish_content", "paid_ads"}
     assert all(a.status == "pending" and a.execution_status == "not_started" for a in aps)
     # Dateien im Workspace erzeugt
     assert (company.settings.workspace_dir / "product" / "index.html").exists()
     assert (company.settings.workspace_dir / "site" / "impressum.html").exists()
     # Meilensteine und Berichte
-    assert len(company.events.list(types=["milestone.achieved"])) == 5
+    assert len([e for e in company.events.list(types=["milestone.achieved"]) if "Zyklus 1" in e.message]) == 5
     assert company.db.query("SELECT * FROM artifacts WHERE kind='report'")
 
 

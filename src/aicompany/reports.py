@@ -19,8 +19,10 @@ def build_report(company, *, title: str = "Managementbericht", run_id: str | Non
         lines += ["", "> **Hinweis:** Dry-Run – alle Agentenergebnisse und Kosten sind simuliert."]
     exp = s["experiment"]
     lines += ["", "## Gesamtstatus", "", f"- Ziel: {s['company']['goal']}", f"- Unternehmensstatus: **{s['company']['status']}**",
-              f"- Experimenttag: {exp['day']}/{exp['days']} (Plan-Phase: {(exp['plan_phase'] or {}).get('name', '–')}, "
-              f"Arbeitsphase: {exp['work_phase']['name']})",
+              f"- Zyklus {exp['cycle']} ({exp['cycle_label']}), Tag {exp['day']}/{exp['days']} – Arbeitsphase: {exp['work_phase']['name']}",
+              f"- Bisherige Zyklen: " + (", ".join(f"{c['cycle']}: {c['label']}" + (f" → {c['decision']}" if c.get('decision') else "")
+                                                   for c in exp['cycles']) or "–"),
+              f"- Verworfene Ideen: {', '.join(exp['tried_ideas']) or 'keine'}",
               f"- Fortschritt: {s['progress']['completed']}/{s['progress']['total']} Aufgaben ({s['progress']['percent']} %) – "
               f"Formel: {s['progress']['formula']}"]
     idea = s["selected_idea"]

@@ -4,16 +4,26 @@ import { eur, TASK_STATUS } from "../labels";
 import type { TaskStatus } from "../types";
 import { ApprovalCenter } from "./Approvals";
 
+const DECISION_LABEL: Record<string, string> = { continue: "weiter im Betrieb", pivot: "Kurswechsel", stop: "neue Nische" };
+
 const COLUMNS: TaskStatus[] = ["pending", "in_progress", "review", "blocked", "failed", "completed"];
 
 function TasksBoard() {
   const { state, open } = useApp();
   const [agent, setAgent] = useState("");
-  const tasks = state.snapshot!.tasks.filter((t) => !agent || t.agent === agent);
+  const current = state.snapshot!.experiment.cycle;
+  const [cycle, setCycle] = useState<string>("current");
+  const tasks = state.snapshot!.tasks.filter((t) => (!agent || t.agent === agent)
+    && (cycle === "all" || t.cycle === (cycle === "current" ? current : Number(cycle))));
+  const cycles = [...new Set(state.snapshot!.tasks.map((t) => t.cycle))].sort((a, b) => a - b);
   return (
     <div>
       <div className="filters"><select value={agent} onChange={(e) => setAgent(e.target.value)} aria-label="Agent">
         <option value="">Alle Agenten</option>{state.snapshot!.agents.map((a) => <option key={a.id} value={a.id}>{a.name} – {a.title}</option>)}
+      </select>
+      <select value={cycle} onChange={(e) => setCycle(e.target.value)} aria-label="Zyklus">
+        <option value="current">Aktueller Zyklus ({current})</option><option value="all">Alle Zyklen</option>
+        {cycles.map((c) => <option key={c} value={c}>Zyklus {c}</option>)}
       </select></div>
       <div className="board">
         {COLUMNS.map((c) => {
@@ -46,7 +56,19 @@ function Goals() {
   return (
     <div className="goals">
       <div className="col">
-        <h3>Meilensteine</h3>
+        <h3>Unternehmensgeschichte</h3>
+        <ol className="cycles" data-testid="cycle-history">{s.experiment.cycles.map((c) => (
+          <li key={c.cycle} className={c.cycle === s.experiment.cycle ? "current" : ""}>
+            <b>Zyklus {c.cycle}</b> · {c.label}{c.idea ? ` · ${c.idea}` : ""}
+            <div className="small muted">{new Date(c.started_at).toLocaleString("de-DE")}
+              {c.decision ? ` → Entscheidung: ${DECISION_LABEL[c.decision] ?? c.decision}` : c.cycle === s.experiment.cycle ? " · läuft" : ""}</div>
+          </li>))}
+          {s.experiment.cycles.length === 0 && <li className="muted">Wartet auf ersten Lauf.</li>}
+        </ol>
+        {s.experiment.tried_ideas.length > 0 && <p className="small">Verworfene Ideen: {s.experiment.tried_ideas.join(", ")}</p>}
+        <p className="small muted">Nach jeder Zyklusentscheidung plant das Unternehmen selbst den nächsten Zyklus:
+          weiter → laufender Betrieb, Kurswechsel → nächstbeste Idee, Stopp → neue Nische (max. {s.experiment.max_cycles} Zyklen).</p>
+        <h3>Meilensteine (aktueller Zyklus)</h3>
         <ul className="milestones">{s.milestones.map((m) => (
           <li key={m.id} className={m.achieved ? "done" : ""}><span>{m.achieved ? "✔" : "○"}</span> <b>{m.id}</b> {m.title}
             {m.achieved_at && <span className="muted small"> · {new Date(m.achieved_at).toLocaleString("de-DE")}</span>}</li>))}</ul>
@@ -56,7 +78,7 @@ function Goals() {
             {s.ideas.map((i) => <tr key={i.id} className={i.status === "selected" ? "hl" : ""}><td>{i.name}
               <details><summary className="small">Bewertungsgrundlage</summary><ul className="bullets small">{(i.data.lines ?? []).map((l) =>
                 <li key={l.label}>{l.label}: {l.points.toFixed(1)}/{l.weight} – {l.evidence}</li>)}</ul></details></td>
-              <td>{i.score}</td><td>{i.status === "selected" ? "ausgewählt" : i.status === "not_selected" ? "nicht gewählt" : "Kandidat"}</td></tr>)}
+              <td>{i.score}</td><td>{i.status === "selected" ? "ausgewählt" : i.status === "tried" ? "versucht – verworfen" : i.status === "not_selected" ? "nicht gewählt" : "Kandidat"}</td></tr>)}
           </tbody></table>}
         <p className="small muted">Die Punktzahl ist eine Entscheidungshilfe und kein Erfolgsbeweis.</p>
       </div>

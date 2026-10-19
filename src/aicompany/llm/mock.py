@@ -69,6 +69,13 @@ def _action(action_type: str, title: str, params: dict, cost: float = 0.0, recur
     )
 
 
+def _totals(metrics: list[dict]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for m in metrics:
+        out[m["name"]] = out.get(m["name"], 0.0) + float(m["value"])
+    return out
+
+
 class MockBackend:
     name = "dry-run-mock"
     simulated = True
@@ -153,8 +160,12 @@ class MockBackend:
                 kill_criteria=[SIM + "Weniger als 1 % Conversion nach 300 Besuchern"],
                 missing_information=[SIM + "Echte Zahlungsbereitschaft"],
             ))
+        excluded = set(call.context.get("excluded_ideas") or [])
+        ranked = sorted((i for i in ideas if i.idea_id not in excluded),
+                        key=lambda i: -sum(c.rating for c in i.criteria))
+        best = ranked[0].idea_id if ranked else ideas[0].idea_id
         return IdeaEvaluation(
-            ideas=ideas, recommendation=Recommendation(idea_id="angebotsrechner-handwerk", reason=SIM + "Beste Kombination aus Umsetzbarkeit, Kosten und Risiko"),
+            ideas=ideas, recommendation=Recommendation(idea_id=best, reason=SIM + "Beste noch nicht versuchte Kombination aus Umsetzbarkeit, Kosten und Risiko"),
             rejected=[Rejection(idea_id="foerdercheck-kmu", reason=SIM + "Rechtliches Risiko durch Beratungsnähe"),
                       Rejection(idea_id="protokoll-automation", reason=SIM + "Datenschutzrisiko (personenbezogene Inhalte)")],
             selection_criteria=[SIM + "Punktzahl ≥ Mindestwert", SIM + "kein kritisches Risiko", SIM + "MVP in < 1 Woche baubar"],
@@ -165,6 +176,8 @@ class MockBackend:
         ids = [i["idea_id"] for i in evaluation.get("ideas", [])][:3] or ["angebotsrechner-handwerk"]
         if call.context.get("selected_idea"):
             ids = [call.context["selected_idea"]["id"]]
+        elif evaluation.get("recommendation", {}).get("idea_id") and evaluation["recommendation"]["idea_id"] not in ids:
+            ids = [evaluation["recommendation"]["idea_id"]] + ids[:2]
         ideas = [IdeaFinance(
             idea_id=i, pricing_model="one_time", price_eur=29.0, setup_cost_eur=0.0, monthly_fixed_costs_eur=8.0,
             variable_cost_per_sale_eur=1.6,
@@ -333,6 +346,15 @@ class MockBackend:
         )
 
     def _gen_ops_plan(self, call: AgentCall) -> OpsPlan:
+        if call.context.get("cycle_type") == "operate":
+            return OpsPlan(
+                recurring_tasks=[RecurringTask(name="Kennzahlen-Review", schedule="wöchentlich", owner_agent="analytics")],
+                runbook=["Neue Version erst nach QA-Freigabe und Eigentümer-Freigabe veröffentlichen"],
+                monitoring=["Budget", "Fehler", "offene Freigaben"], risks=[],
+                external_actions=[_action("publish_website", f"Produktversion aus Zyklus {call.context.get('cycle')} veröffentlichen (lokales Release-Paket)",
+                                          {"source_dir": "product", "target": "local_release"},
+                                          justification=SIM + "QA-geprüfte Verbesserungen ausliefern")],
+            )
         return OpsPlan(
             recurring_tasks=[RecurringTask(name="Kennzahlen-Review", schedule="alle 3 Tage", owner_agent="analytics"),
                              RecurringTask(name="Managementbericht", schedule="nach jedem Lauf", owner_agent="ceo")],
@@ -373,6 +395,17 @@ class MockBackend:
                 statistical_notes="Keine Daten – keine Aussage möglich.",
             )
         used = [MetricObservation(name=m["name"], value=m["value"], source=m["source"]) for m in metrics]
+        totals = _totals(metrics)
+        if totals.get("visitors", 0) >= 300 and totals.get("sales", 0) == 0:
+            return AnalyticsReview(
+                data_available=True, metrics_used=used,
+                hypothesis_results=[HypothesisResult(hypothesis_id="H1", status="rejected",
+                                                     evidence=f"{totals['visitors']:.0f} Besucher, 0 Verkäufe – Mindeststichprobe erreicht")],
+                recommendations=[GrowthRecommendation(action="Kurswechsel prüfen: Angebot findet trotz Reichweite keine Käufer",
+                                                      reason="H1 widerlegt", target_agent="ceo")],
+                stop_recommendations=["Aktuelle Ansprache nicht weiter skalieren"], experiments_proposed=[],
+                statistical_notes="Mindeststichprobe erreicht; Ergebnis ist ein Signal, kein Kausalbeweis.",
+            )
         return AnalyticsReview(
             data_available=True, metrics_used=used,
             hypothesis_results=[HypothesisResult(hypothesis_id="H1", status="inconclusive", evidence="Stichprobe unter Mindestgröße")],
@@ -381,6 +414,15 @@ class MockBackend:
         )
 
     def _gen_final_decision(self, call: AgentCall) -> FinalDecision:
+        totals = _totals(call.context.get("metrics", []))
+        if totals.get("visitors", 0) >= 300 and totals.get("sales", 0) == 0:
+            return FinalDecision(decision="pivot", rationale=SIM + f"{totals['visitors']:.0f} Besucher, aber 0 Verkäufe – die Nische trägt nicht. "
+                                 "Kurswechsel zur nächstbesten noch nicht versuchten Idee.",
+                                 lessons=["Reichweite allein reicht nicht – Zahlungsbereitschaft früher testen"],
+                                 next_steps=["Nächstbeste Idee neu bewerten", "Vorhandene Landingpage-Bausteine wiederverwenden"])
+        if totals.get("sales", 0) > 0:
+            return FinalDecision(decision="continue", rationale=SIM + f"{totals['sales']:.0f} Verkäufe – Nachfrage belegt, Betrieb fortsetzen",
+                                 lessons=["Kanal mit Verkäufen ausbauen"], next_steps=["Produkt verbessern", "Content ausbauen"])
         if not call.context.get("metrics"):
             return FinalDecision(decision="continue", rationale=SIM + "Keine Marktdaten erhoben – Markttest steht aus; keine Grundlage für Kurswechsel",
                                  lessons=["Veröffentlichung und Messung sind Voraussetzung für jede Bewertung"],

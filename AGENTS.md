@@ -35,7 +35,20 @@ Eine Aufgabe, deren Art nicht zur Rolle passt, schlägt fehl. Deshalb kann der C
 | Launch vorbereiten, Freigaben beantragen | Operations | CEO-Review, **Eigentümer** (Freigaben) |
 | Messplan, Auswertungen | Analytics | Programm (keine erfundenen Kennzahlen) |
 | Experimente | Marketing | **Eigentümer** (Veröffentlichung/Ausgaben) |
-| Abschlussentscheidung | **CEO** | Eigentümer (Bericht) |
+| Zyklusentscheidung (weiter / Kurswechsel / neue Nische) | **CEO** | Programm plant den nächsten Zyklus; Eigentümer liest den Bericht |
+
+### Laufender Betrieb (jeder weitere Zyklus nach `continue`)
+
+| Aufgabe | Verantwortlich | Prüft / entscheidet |
+|---|---|---|
+| Kennzahlen auswerten | Analytics | Programm (nur echte Messwerte des Zyklus) |
+| Verbesserungen planen | Product | CEO-Review |
+| Neue Version bauen | Builder | Programm (statische Prüfungen), QA-Test mit Rückgabe |
+| Content und Kampagnen | Marketing | Eigentümer (Veröffentlichung, Ausgaben) |
+| Vertrieb und Anfragen | Sales | Programm (Rechtsgrundlagen) |
+| Betrieb und Release | Operations | Eigentümer (Freigabe der Veröffentlichung) |
+| Monatsabschluss | Finance | Programm |
+| Zyklusentscheidung | CEO | Programm plant den nächsten Zyklus |
 
 ## Regeln für alle Agenten (im Prompt **und** im Programm)
 
